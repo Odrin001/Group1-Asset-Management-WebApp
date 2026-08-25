@@ -9,7 +9,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    const { uid, assetName, currentRoom, category, quantity, assetStatus, condition, description } = body;
+    const { uid, assetName, currentRoom, category, quantity, assetStatus, condition, description, image } = body;
 
     if (!uid || !assetName) {
       return NextResponse.json(
@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       assetStatus: assetStatus || "active",
       condition: condition || "good",
       description: description || "",
+      ...(image ? { image } : {}),
       dateRegistered: new Date().toISOString().split('T')[0],
     });
 

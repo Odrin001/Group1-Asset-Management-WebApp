@@ -9,7 +9,7 @@ export async function GET() {
 
     const logs = await ScanLog.find()
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(2000);
 
     console.log("Fetched logs", logs.length);
 
@@ -18,6 +18,21 @@ export async function GET() {
     });
   } catch (error) {
     console.log("Error fetching logs", error);
+    return NextResponse.json(
+      { message: "Server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE() {
+  try {
+    await connectDB();
+    await ScanLog.deleteMany({});
+
+    return NextResponse.json({ message: "All scan logs cleared" }, { status: 200 });
+  } catch (error) {
+    console.log("Error clearing logs", error);
     return NextResponse.json(
       { message: "Server error" },
       { status: 500 }

@@ -43,6 +43,11 @@ const RFIDTagSchema = new mongoose.Schema(
       default: "",
     },
 
+    image: {
+      type: String,
+      default: "",
+    },
+
     dateRegistered: {
       type: String,
       default: () => new Date().toISOString().split('T')[0],

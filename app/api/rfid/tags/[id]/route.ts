@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import RFIDTag from "@/models/RFIDTag";
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -55,6 +55,7 @@ export async function PUT(
         assetStatus: body.assetStatus,
         condition: body.condition,
         description: body.description,
+        ...(typeof body.image === "string" ? { image: body.image } : {}),
       },
       { new: true }
     );

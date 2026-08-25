@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Asset } from "@/lib/types";
+import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
 
 export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
+  const [fullImage, setFullImage] = useState<string | null>(null);
   const [editingAsset, setEditingAsset] = useState<any | null>(null);
   const [toastMessage, setToastMessage] = useState("");
   
@@ -78,6 +80,8 @@ export default function DashboardPage() {
 
             description: tag.description || "",
 
+            image: tag.image || "",
+
             createdAt: tag.createdAt,
           }));
 
@@ -110,21 +114,8 @@ export default function DashboardPage() {
       };
     }, []);
 
-  // Filter assets based on search query and category
-  const filteredAssets = assets.filter((asset) => {
-    // Show Computer Hardware and Furniture categories (case insensitive)
-    const category = asset.category.toLowerCase();
-    if (category !== "computer hardware" && category !== "furniture") return false;
-    
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      asset.name?.toLowerCase().includes(query) ||
-      asset.category?.toLowerCase().includes(query) ||
-      asset.location?.toLowerCase().includes(query) ||
-      asset.assetType?.toLowerCase().includes(query)
-    );
-  });
+  const hardwareAssets = assets.filter((asset) => asset.category?.toLowerCase() === "computer hardware");
+  const { filters, setFilters, visibleAssets: filteredAssets, categories, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(hardwareAssets, searchQuery);
 
   return (
     <div className="space-y-8 p-8">
@@ -207,17 +198,22 @@ export default function DashboardPage() {
       </div>
 
       {/* Table Section */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-visible shadow-sm">
         {/* Table Header with Action Buttons */}
         <div className="px-8 py-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
           <h3 className="font-semibold text-gray-900 text-lg">Assets</h3>
           <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium">
-              Filter
-            </button>
-            <button className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium">
-              Sort
-            </button>
+            <AssetListControls
+              filters={filters}
+              setFilters={setFilters}
+              categories={categories}
+              statuses={statuses}
+              conditions={conditions}
+              sortOption={sortOption}
+              setSortOption={setSortOption}
+              activeFilterCount={activeFilterCount}
+              clearFilters={clearFilters}
+            />
           </div>
         </div>
 
@@ -251,6 +247,9 @@ export default function DashboardPage() {
                     Asset Name
                   </th>
                   <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
+                    Image
+                  </th>
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Category
                   </th>
                   <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
@@ -278,6 +277,13 @@ export default function DashboardPage() {
                   >
                     <td className="px-8 py-5 text-sm text-gray-900 font-medium">
                       {asset.name}
+                    </td>
+                    <td className="px-8 py-5 text-sm text-gray-600">
+                      {asset.image ? (
+                        <img src={asset.image} alt={asset.name} className="h-12 w-12 rounded object-cover" />
+                      ) : (
+                        <span>No image</span>
+                      )}
                     </td>
                     <td className="px-8 py-5 text-sm text-gray-600">
                       {asset.category}
@@ -373,6 +379,7 @@ export default function DashboardPage() {
                                     assetStatus: tag.assetStatus || "active",
                                     condition: tag.condition || "good",
                                     description: tag.description || "",
+                                    image: tag.image || "",
                                     createdAt: tag.createdAt,
                                   }));
 
@@ -479,6 +486,21 @@ export default function DashboardPage() {
 
       <div className="space-y-4 text-sm">
         <div>
+          {selectedAsset.image ? (
+            <button
+              type="button"
+              onClick={() => setFullImage(selectedAsset.image)}
+              className="block w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              aria-label={`View full image of ${selectedAsset.name}`}
+            >
+              <img src={selectedAsset.image} alt={selectedAsset.name} className="h-48 w-full rounded-lg object-contain bg-gray-100" />
+            </button>
+          ) : (
+            <div className="flex h-32 items-center justify-center rounded-lg bg-gray-100 text-gray-500">No image</div>
+          )}
+        </div>
+
+        <div>
           <p className="font-semibold text-gray-700">Asset Name</p>
           <p className="text-gray-600">{selectedAsset.name}</p>
         </div>
@@ -513,9 +535,33 @@ export default function DashboardPage() {
     </div>
   </div>
 )}
+    {fullImage && (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6"
+        onClick={() => setFullImage(null)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Full asset image"
+      >
+        <button
+          type="button"
+          onClick={() => setFullImage(null)}
+          className="absolute right-6 top-6 text-4xl leading-none text-white hover:text-gray-300"
+          aria-label="Close full image"
+        >
+          ×
+        </button>
+        <img
+          src={fullImage}
+          alt="Full asset"
+          className="max-h-[90vh] max-w-[90vw] object-contain"
+          onClick={(event) => event.stopPropagation()}
+        />
+      </div>
+    )}
     {editingAsset && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl">
+        <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-gray-900">
               Edit Asset
@@ -693,6 +739,48 @@ export default function DashboardPage() {
       placeholder="Description"
       rows={4}
     />
+  </div>
+
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 mb-2">
+      Asset Image <span className="font-normal text-gray-500">(Optional)</span>
+    </label>
+    {editingAsset.image ? (
+      <img src={editingAsset.image} alt={editingAsset.name} className="mb-3 h-32 w-32 rounded-lg object-cover border border-gray-200" />
+    ) : (
+      <p className="mb-3 text-sm text-gray-500">No image</p>
+    )}
+    <input
+      type="file"
+      accept="image/*"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+          alert("Asset image must be 5 MB or smaller");
+          e.target.value = "";
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const result = event.target?.result;
+          if (typeof result === "string") {
+            setEditingAsset({ ...editingAsset, image: result });
+          }
+        };
+        reader.readAsDataURL(file);
+      }}
+      className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+    />
+    {editingAsset.image && (
+      <button
+        type="button"
+        onClick={() => setEditingAsset({ ...editingAsset, image: "" })}
+        className="mt-2 text-sm text-red-600 hover:text-red-700"
+      >
+        Remove image
+      </button>
+    )}
   </div>
 
             <button

@@ -11,5 +11,6 @@ export interface Asset {
   assetStatus: string;
   condition: string;
   description?: string;
+  image?: string;
   createdAt: string;
 }

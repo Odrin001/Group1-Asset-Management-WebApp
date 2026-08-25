@@ -25,11 +25,30 @@ export async function POST(req: Request) {
     const tag = await RFIDTag.findOne({ uid });
 
     if (!tag) {
-      console.log("RFID tag not registered", uid);
+      const now = new Date();
+
+      await ScanLog.create({
+        uid,
+        assetName: "Unregistered",
+        action: "UNKNOWN",
+        fromRoom: "-",
+        toRoom: room,
+
+        time: now.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }),
+
+        date: now.toLocaleDateString("en-GB"),
+      });
+
       return NextResponse.json(
-        { message: "RFID tag not registered" },
-        { status: 404 }
-      );
+        {
+          message: "Unregistered RFID scanned",
+        },
+        { status: 200 }
+      );8
     }
 
     let action = "";

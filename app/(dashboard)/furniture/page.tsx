@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Asset } from "@/lib/types";
+import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
 
 export default function FurniturePage() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -62,6 +63,8 @@ export default function FurniturePage() {
 
                 condition: tag.condition || "good",
 
+                image: tag.image || "",
+
                 createdAt: tag.createdAt,
               }));
 
@@ -75,6 +78,8 @@ export default function FurniturePage() {
 
         fetchAssets();
       }, []);
+
+  const { filters, setFilters, visibleAssets, categories, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(assets);
 
   return (
     <div className="space-y-6">
@@ -113,35 +118,38 @@ export default function FurniturePage() {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg p-4 border border-gray-200">
           <p className="text-gray-500 text-sm">Total Furniture</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{assets.length}</p>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{visibleAssets.length}</p>
         </div>
         <div className="bg-white rounded-lg p-4 border border-gray-200">
           <p className="text-gray-500 text-sm">Active Furniture</p>
           <p className="text-3xl font-bold text-primary-500 mt-2">
-            {assets.filter((a) => a.assetStatus === "active").length}
+            {visibleAssets.filter((a) => a.assetStatus === "active").length}
           </p>
         </div>
         <div className="bg-white rounded-lg p-4 border border-gray-200">
           <p className="text-gray-500 text-sm">RFID Tracked</p>
           <p className="text-3xl font-bold text-blue-600 mt-2">
-            {assets.filter((a) => a.rfidUid).length}
+            {visibleAssets.filter((a) => a.rfidUid).length}
           </p>
         </div>
       </div>
 
       {/* Table Section */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
         {/* Table Header with Action Buttons */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
           <h3 className="font-semibold text-gray-900">Furniture Assets</h3>
-          <div className="flex gap-2">
-            <button className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 transition">
-              Filter
-            </button>
-            <button className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 transition">
-              Sort
-            </button>
-          </div>
+          <AssetListControls
+            filters={filters}
+            setFilters={setFilters}
+            categories={categories}
+            statuses={statuses}
+            conditions={conditions}
+            sortOption={sortOption}
+            setSortOption={setSortOption}
+            activeFilterCount={activeFilterCount}
+            clearFilters={clearFilters}
+          />
         </div>
 
         {/* Loading State */}
@@ -165,13 +173,16 @@ export default function FurniturePage() {
         )}
 
         {/* Table */}
-        {!isLoading && assets.length > 0 && (
+        {!isLoading && visibleAssets.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Image
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Category
@@ -194,13 +205,20 @@ export default function FurniturePage() {
                 </tr>
               </thead>
               <tbody>
-                {assets.map((asset) => (
+                {visibleAssets.map((asset) => (
                   <tr
                     key={asset.id}
                     className="border-b border-gray-200 hover:bg-gray-50 transition"
                   >
                     <td className="px-6 py-4 text-sm text-gray-900 font-medium">
                       {asset.name}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {asset.image ? (
+                        <img src={asset.image} alt={asset.name} className="h-12 w-12 rounded object-cover" />
+                      ) : (
+                        <span>No image</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {asset.category}
@@ -277,6 +295,7 @@ export default function FurniturePage() {
                                     assetStatus: tag.assetStatus || "active",
 
                                     condition: tag.condition || "good",
+                                    image: tag.image || "",
 
                                     createdAt: tag.createdAt,
                                   }));
@@ -314,7 +333,7 @@ export default function FurniturePage() {
         )}
 
         {/* Empty State */}
-        {!isLoading && assets.length === 0 && (
+        {!isLoading && visibleAssets.length === 0 && (
           <div className="px-6 py-16 text-center">
             <svg
               className="w-12 h-12 text-gray-300 mx-auto mb-4"

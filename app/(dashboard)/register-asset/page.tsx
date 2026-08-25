@@ -10,6 +10,7 @@ export default function RegisterAssetPage() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [image, setImage] = useState("");
 
   const [formData, setFormData] = useState({
     assetType: "",
@@ -93,6 +94,7 @@ export default function RegisterAssetPage() {
           assetStatus: formData.assetStatus,
           condition: formData.condition,
           description: formData.description || undefined,
+          ...(image ? { image } : {}),
         }),
       });
 
@@ -480,6 +482,42 @@ export default function RegisterAssetPage() {
                   </svg>
                 }
               />
+
+              <div>
+                <label htmlFor="assetImage" className="block text-sm font-semibold text-gray-900 mb-2">
+                  Asset Image <span className="font-normal text-gray-500">(Optional)</span>
+                </label>
+                <input
+                  id="assetImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) {
+                      setImage("");
+                      return;
+                    }
+                    if (file.size > 5 * 1024 * 1024) {
+                      setError("Asset image must be 5 MB or smaller");
+                      e.target.value = "";
+                      setImage("");
+                      return;
+                    }
+                    setError("");
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const result = event.target?.result;
+                      if (typeof result === "string") setImage(result);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm text-gray-700"
+                />
+                <p className="text-xs text-gray-500 mt-1">Optional image up to 5 MB.</p>
+                {image && (
+                  <img src={image} alt="Selected asset preview" className="mt-3 h-32 w-32 rounded-lg object-cover border border-gray-200" />
+                )}
+              </div>
             </div>
           </CardBody>
         </Card>

@@ -125,7 +125,6 @@ export default function RegisterAssetPage() {
   const assetTypeOptions = [
     { value: "computer", label: "Computer Hardware" },
     { value: "furniture", label: "Furniture" },
-    { value: "equipment", label: "Equipment" },
   ];
 
   const conditionOptions = [

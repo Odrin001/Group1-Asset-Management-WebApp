@@ -188,7 +188,7 @@ export default function ReportsPage() {
     );
   };
 
-  const handleExportReport = () => {
+  const handleExportReport = async () => {
     let exportAssets = assets;
     let exportLogs = logs;
 
@@ -219,9 +219,41 @@ export default function ReportsPage() {
       });
     }
 
-    generatePDF(
-      exportAssets,
-      exportLogs,
+    const reportMeta = {
+      scope: exportScope,
+      scopeLabel:
+        exportScope === "whole"
+          ? "Whole Result"
+          : exportScope === "filtered"
+            ? "Filtered Result"
+            : "Custom Selection",
+      location:
+        exportScope === "custom"
+          ? exportLocation === "All"
+            ? "All Locations"
+            : exportLocation
+          : selectedRoom === "All"
+            ? "All Locations"
+            : selectedRoom,
+      asset:
+        exportScope === "custom"
+          ? selectedExportAssets.length > 0
+            ? `${selectedExportAssets.length} selected assets`
+            : "All Assets"
+          : searchAsset.trim()
+            ? searchAsset.trim()
+            : "All Assets",
+      dateRange:
+        exportScope === "custom"
+          ? !exportFrom && !exportTo
+            ? "All Dates"
+            : `${exportFrom || "Start"} to ${exportTo || "Now"}`
+          : !dateFromStr && !dateToStr
+            ? "All Dates"
+            : `${dateFromStr || "Start"} to ${dateToStr || "Now"}`,
+    };
+
+    const pdfOptions =
       exportScope === "whole"
         ? {
             includeSummary: true,
@@ -238,12 +270,37 @@ export default function ReportsPage() {
             includeActivity,
             includeImages,
             includeAssetFields,
-          }
-    );
+          };
+
+    await generatePDF(exportAssets, exportLogs, pdfOptions, reportMeta);
     setShowExportOptions(false);
   };
 
-  const generatePDF = (
+  const normalizeImageForPdf = (source: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("Unable to create canvas context for PDF image"));
+          return;
+        }
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0);
+
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
+      };
+      image.onerror = () => reject(new Error("Unable to load asset image"));
+      image.src = source;
+    });
+
+  const generatePDF = async (
     exportAssets = assets,
     exportLogs = logs,
     options = {
@@ -253,280 +310,509 @@ export default function ReportsPage() {
       includeActivity: true,
       includeImages: true,
       includeAssetFields: true,
+    },
+    reportMeta = {
+      scope: "whole",
+      scopeLabel: "Whole Result",
+      location: "All Locations",
+      asset: "All Assets",
+      dateRange: "All Dates",
     }
   ) => {
-  const doc = new jsPDF();
-  const exportedRoom1Assets = exportAssets.filter((asset) => asset.currentRoom === "Room1");
-  const exportedOutsideAssets = exportAssets.filter((asset) => asset.currentRoom === "Outside");
-  const reportLogs = exportLogs.map((log) => {
-    const matchingAsset = exportAssets.find((asset) => asset.uid === log.uid);
-    return matchingAsset ? { ...log, assetName: matchingAsset.assetName } : log;
-  });
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
 
-  let y = 20;
-  const addPageIfNeeded = (space = 15) => {
-    if (y + space > 275) {
-      doc.addPage();
-      y = 20;
-    }
-  };
-  const drawAssetNameLine = (
-    prefix: string,
-    assetName: string,
-    suffix: string,
-    x: number,
-    lineY: number,
-    fontSize = 11
-  ) => {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(fontSize);
-    doc.text(prefix, x, lineY);
-    const prefixWidth = doc.getTextWidth(prefix);
-    doc.setFont("helvetica", "bold");
-    doc.text(assetName, x + prefixWidth, lineY);
-    const nameWidth = doc.getTextWidth(assetName);
-    doc.setFont("helvetica", "normal");
-    doc.text(suffix, x + prefixWidth + nameWidth, lineY);
-  };
+    const exportedRoom1Assets = exportAssets.filter((asset) => asset.currentRoom === "Room1");
+    const exportedOutsideAssets = exportAssets.filter((asset) => asset.currentRoom === "Outside");
 
-doc.setFont("helvetica", "bold");
-doc.setFontSize(22);
-
-doc.text(
-  "SDCA Asset Management System",
-  105,
-  20,
-  { align: "center" }
-);
-
-  y += 20;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20.8);
-  doc.text("Asset Reports", 20, y);
-
-  y += 10;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text(
-    `Generated: ${new Date().toLocaleString()}`,
-    20,
-    y
-  );
-
-  y += 15;
-
-  // TOTAL ASSETS
-  if (options.includeSummary) {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18.2);
-  doc.text(`Total Assets: ${exportAssets.length}`, 20, y);
-
-  y += 10;
-
-  exportAssets.forEach((asset) => {
-    drawAssetNameLine(
-      "• ",
-      asset.assetName,
-      ` — UID: ${asset.uid}`,
-      25,
-      y
-    );
-
-    y += 7;
-  });
-  }
-
-  // ALL ASSET DESCRIPTIONS
-  if (options.includeDescriptions) {
-  y += 10;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18.2);
-  doc.text("All Asset Descriptions:", 20, y);
-  y += 10;
-
-  exportAssets.forEach((asset) => {
-    const description = `${asset.assetName} — UID: ${asset.uid}`;
-    const descriptionLines = doc.splitTextToSize(description, 165);
-    const imageHeight = options.includeImages && asset.image ? 55 : 0;
-
-    addPageIfNeeded(descriptionLines.length * 5 + 40 + imageHeight);
-
-    drawAssetNameLine("• ", asset.assetName, "", 25, y, 13.75);
-    y += 8;
-
-    const fields = options.includeAssetFields
-      ? [
-          ["UID:", asset.uid],
-          ["Category:", asset.category || "N/A"],
-          ["Condition:", asset.condition || "N/A"],
-          ["Status:", asset.assetStatus || "N/A"],
-          ["Current Location:", asset.currentRoom || "Unknown"],
-        ]
-      : [["UID:", asset.uid]];
-
-    doc.setFontSize(11);
-    fields.forEach(([label, value], fieldIndex) => {
-      doc.setFont("helvetica", "bold");
-      const separator = fieldIndex < fields.length - 1 ? " ||" : "";
-      doc.text(`${label} `, 25, y);
-      const labelWidth = doc.getTextWidth(`${label} `);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${String(value)}${separator}`, 25 + labelWidth, y);
-      y += 5;
+    const reportLogs = exportLogs.map((log) => {
+      const matchingAsset = exportAssets.find((asset) => asset.uid === log.uid);
+      return matchingAsset ? { ...log, assetName: matchingAsset.assetName } : log;
     });
 
-    if (options.includeImages && asset.image) {
-      try {
-        const imageFormat = asset.image.startsWith("data:image/png")
-          ? "PNG"
-          : asset.image.startsWith("data:image/webp")
-            ? "WEBP"
-            : "JPEG";
+    let y = 20;
+
+    const addPageIfNeeded = (space = 18) => {
+      if (y + space > 270) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    const drawSectionHeader = (title: string) => {
+      addPageIfNeeded(28);
+
+      doc.setDrawColor(148, 163, 184);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 6;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, margin, y);
+      y += 7.5;
+
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 9;
+    };
+
+    const drawFooter = (pageNumber: number, totalPages: number) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        `SDCA Asset Management System | Asset & RFID Activity Report | Page ${pageNumber} of ${totalPages}`,
+        margin,
+        pageHeight - 8
+      );
+    };
+
+    const drawFooterForAllPages = () => {
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i += 1) {
+        doc.setPage(i);
+        drawFooter(i, totalPages);
+      }
+    };
+
+    const drawSummaryCard = (label: string, value: string | number, x: number, width: number) => {
+      const cardHeight = 18;
+      const cardY = y;
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(x, cardY, width, cardHeight, 2, 2, "F");
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(x, cardY, width, cardHeight, 2, 2, "S");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.text(label, x + 4, cardY + 6);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(value), x + 4, cardY + 14);
+    };
+
+    const summaryTotal = exportAssets.length;
+    const summaryScans = reportLogs.length;
+    const scansToday = reportLogs.filter((log) => {
+      const today = new Date().toDateString();
+      return new Date(log.createdAt).toDateString() === today;
+    }).length;
+
+    const reportLogo = await normalizeImageForPdf("/SDCA-Logo.png").catch(() => null);
+
+    doc.setTextColor(15, 23, 42);
+    const logoX = margin;
+    const logoY = 9;
+    const logoWidth = 28;
+    const logoHeight = 18;
+
+    if (reportLogo) {
+      doc.addImage(reportLogo, "PNG", logoX, logoY, logoWidth, logoHeight);
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("SDCA ASSET MANAGEMENT SYSTEM", logoX + logoWidth + 7, 18);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.text("Asset & RFID Activity Report", logoX + logoWidth + 7, 26);
+
+    y = 36;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`, margin, y);
+    doc.text(`Report Scope: ${reportMeta.scopeLabel}`, pageWidth - margin, y, { align: "right" });
+    doc.setDrawColor(148, 163, 184);
+    doc.line(margin, y + 6, pageWidth - margin, y + 6);
+    y += 14;
+
+    if (options.includeSummary) {
+      drawSectionHeader("Executive Summary");
+
+      const firstRowX = [margin, margin + 58, margin + 116];
+      const secondRowX = [margin, margin + 88];
+      const firstRowWidths = [52, 52, 52];
+      const secondRowWidths = [80, 80];
+
+      drawSummaryCard("Total Assets", summaryTotal, firstRowX[0], firstRowWidths[0]);
+      drawSummaryCard("Room 1", exportedRoom1Assets.length, firstRowX[1], firstRowWidths[1]);
+      drawSummaryCard("Outside", exportedOutsideAssets.length, firstRowX[2], firstRowWidths[2]);
+      y += 25;
+      drawSummaryCard("Total Scans", summaryScans, secondRowX[0], secondRowWidths[0]);
+      drawSummaryCard("Scans Today", scansToday, secondRowX[1], secondRowWidths[1]);
+      y += 25;
+
+      drawSectionHeader("Report Information");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const scopeLines = [
+        ["Export Type:", reportMeta.scopeLabel],
+        ["Location:", reportMeta.location],
+        ["Asset Filter:", reportMeta.asset],
+        ["Date Range:", reportMeta.dateRange],
+      ];
+
+      for (const [label, value] of scopeLines) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(12.65);
-        doc.text("Image", 25, y + 2);
-        y += 7;
-        doc.addImage(asset.image, imageFormat, 20, y, 60, 50);
-        y += 55;
-      } catch (error) {
-        console.error("Error adding image for", asset.assetName, error);
+        doc.text(label, margin, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(String(value), margin + 40, y);
+        y += 6;
+      }
+      y += 4;
+    }
+
+    if (options.includeDescriptions) {
+      drawSectionHeader("Asset Inventory");
+
+      const inventoryTableX = margin;
+      const inventoryCols = {
+        asset: 29,
+        image: 23,
+        uid: 31,
+        category: 34,
+        condition: 25,
+        status: 25,
+        location: 25,
+      };
+      const inventoryHeader = [
+        { label: "Asset", width: inventoryCols.asset },
+        ...(options.includeImages ? [{ label: "Image", width: inventoryCols.image }] : []),
+        { label: "UID", width: inventoryCols.uid },
+        ...(options.includeAssetFields ? [
+          { label: "Category", width: inventoryCols.category },
+          { label: "Condition", width: inventoryCols.condition },
+          { label: "Status", width: inventoryCols.status },
+        ] : []),
+        { label: "Location", width: inventoryCols.location },
+      ];
+      const inventoryWidth = inventoryHeader.reduce((sum, column) => sum + column.width, 0);
+
+      const drawInventoryHeader = (x: number, headerY: number) => {
+        doc.setFillColor(226, 232, 240);
+        doc.rect(x, headerY, inventoryWidth, 8, "F");
+        doc.setDrawColor(148, 163, 184);
+        doc.rect(x, headerY, inventoryWidth, 8, "S");
+
+        let headerX = x;
+        inventoryHeader.forEach((column) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.2);
+          doc.text(column.label, headerX + 2, headerY + 5.5);
+          headerX += column.width;
+        });
+      };
+
+      const drawInventoryRow = async (asset: any, rowY: number) => {
+        const rowHeight = Math.max(
+          18,
+          5 + Math.max(
+            doc.splitTextToSize(asset.assetName || "Unnamed Asset", inventoryCols.asset - 4).length,
+            ...(options.includeAssetFields
+              ? [
+                  doc.splitTextToSize(asset.category || "N/A", inventoryCols.category - 4).length,
+                  doc.splitTextToSize(asset.condition || "N/A", inventoryCols.condition - 4).length,
+                  doc.splitTextToSize(asset.assetStatus || "N/A", inventoryCols.status - 4).length,
+                ]
+              : [0])
+          ) * 4.5
+        );
+
+        doc.setFillColor(255, 255, 255);
+        doc.rect(inventoryTableX, rowY, inventoryWidth, rowHeight, "F");
+        doc.setDrawColor(203, 213, 225);
+        doc.rect(inventoryTableX, rowY, inventoryWidth, rowHeight, "S");
+
+        let cellX = inventoryTableX;
+
+        const assetLines = doc.splitTextToSize(asset.assetName || "Unnamed Asset", inventoryCols.asset - 4);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.text(assetLines, cellX + 2, rowY + 5);
+        cellX += inventoryCols.asset;
+
+        if (options.includeImages) {
+          if (asset.image) {
+            try {
+              const normalizedImage = await normalizeImageForPdf(asset.image);
+              doc.addImage(normalizedImage, "JPEG", cellX + 2, rowY + 2, 18, 14);
+            } catch (error) {
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(6.5);
+              doc.text("No Image", cellX + 2, rowY + 8);
+            }
+          } else {
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(6.5);
+            doc.text("No Image", cellX + 2, rowY + 8);
+          }
+          cellX += inventoryCols.image;
+        }
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        const uidLines = doc.splitTextToSize(asset.uid || "N/A", inventoryCols.uid - 4);
+        doc.text(uidLines, cellX + 2, rowY + 5);
+        cellX += inventoryCols.uid;
+
+        if (options.includeAssetFields) {
+          const categoryLines = doc.splitTextToSize(asset.category || "N/A", inventoryCols.category - 4);
+          doc.text(categoryLines, cellX + 2, rowY + 5);
+          cellX += inventoryCols.category;
+
+          const conditionLines = doc.splitTextToSize(asset.condition || "N/A", inventoryCols.condition - 4);
+          doc.text(conditionLines, cellX + 2, rowY + 5);
+          cellX += inventoryCols.condition;
+
+          const statusLines = doc.splitTextToSize(asset.assetStatus || "N/A", inventoryCols.status - 4);
+          doc.text(statusLines, cellX + 2, rowY + 5);
+          cellX += inventoryCols.status;
+        }
+
+        const locationLines = doc.splitTextToSize(asset.currentRoom || "Unknown", inventoryCols.location - 4);
+        doc.text(locationLines, cellX + 2, rowY + 5);
+        cellX += inventoryCols.location;
+
+        return rowHeight;
+      };
+
+      let inventoryY = y;
+      drawInventoryHeader(inventoryTableX, inventoryY);
+      inventoryY += 9;
+
+      for (const asset of exportAssets) {
+        const estimatedRowHeight = Math.max(
+          18,
+          Math.max(
+            doc.splitTextToSize(asset.assetName || "Unnamed Asset", inventoryCols.asset - 4).length,
+            ...(options.includeAssetFields
+              ? [
+                  doc.splitTextToSize(asset.category || "N/A", inventoryCols.category - 4).length,
+                  doc.splitTextToSize(asset.condition || "N/A", inventoryCols.condition - 4).length,
+                  doc.splitTextToSize(asset.assetStatus || "N/A", inventoryCols.status - 4).length,
+                ]
+              : [0]),
+            doc.splitTextToSize(asset.currentRoom || "Unknown", inventoryCols.location - 4).length
+          ) * 4.5 + 7
+        );
+
+        if (inventoryY + estimatedRowHeight > pageHeight - 18) {
+          doc.addPage();
+          y = 20;
+          inventoryY = 20;
+          drawInventoryHeader(inventoryTableX, inventoryY);
+          inventoryY += 9;
+        }
+
+        const rowHeight = await drawInventoryRow(asset, inventoryY);
+        inventoryY += rowHeight + 1;
+      }
+
+      y = inventoryY + 11;
+    }
+
+    if (options.includeImages) {
+      const imageAssets = exportAssets.filter((asset) => Boolean(asset.image));
+      if (imageAssets.length > 0) {
+        drawSectionHeader("Asset With Images");
+
+        let imageRowY = y;
+        let imageIndex = 0;
+
+        for (const asset of imageAssets) {
+          if (y + 90 > pageHeight - 20) {
+            doc.addPage();
+            y = 20;
+          }
+
+          const safeX = margin + (imageIndex % 2) * 92;
+          const safeY = y + Math.floor(imageIndex / 2) * 82;
+
+          try {
+            const normalizedImage = await normalizeImageForPdf(asset.image);
+            doc.addImage(normalizedImage, "JPEG", safeX, safeY, 80, 60);
+          } catch (error) {
+            doc.setFillColor(248, 250, 252);
+            doc.rect(safeX, safeY, 80, 60, "F");
+            doc.setDrawColor(203, 213, 225);
+            doc.rect(safeX, safeY, 80, 60, "S");
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(8);
+            doc.text("No Image", safeX + 25, safeY + 30);
+          }
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.text(asset.assetName || "Unnamed Asset", safeX + 2, safeY + 68);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.text(`UID: ${asset.uid || "N/A"}`, safeX + 2, safeY + 75);
+
+          imageIndex += 1;
+          if (imageIndex % 2 === 0) {
+            imageRowY += 82;
+          }
+        }
+
+        y = imageRowY + 94;
       }
     }
 
-    y += 5;
-  });
-  }
+    if (options.includeLocationSummary) {
+      drawSectionHeader("Asset Location Summary");
 
-  if (options.includeLocationSummary) {
-  addPageIfNeeded(25);
-  y += 10;
+      const roomSections = [
+        ["Room 1", exportedRoom1Assets],
+        ["Outside", exportedOutsideAssets],
+      ];
 
-  // ROOM1
-  doc.setFontSize(14);
+      for (const [label, items] of roomSections) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(`${label} — ${items.length} Assets`, margin, y);
+        y += 7;
 
-  doc.text(
-    `Assets in Room1: ${exportedRoom1Assets.length}`,
-    20,
-    y
-  );
+        if (items.length === 0) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.text("No assets found.", margin + 6, y);
+          y += 8;
+          continue;
+        }
 
-  y += 10;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        for (const asset of items) {
+          if (y > 250) {
+            doc.addPage();
+            y = 20;
+          }
+          doc.text(`• ${asset.assetName || "Unnamed Asset"} | ${asset.uid || "N/A"}`, margin + 6, y);
+          y += 6;
+        }
 
-  exportAssets.filter((asset) => asset.currentRoom === "Room1").forEach((asset) => {
-    addPageIfNeeded(12);
-    drawAssetNameLine(
-      "• ",
-      asset.assetName,
-      ` — UID: ${asset.uid}`,
-      25,
-      y
-    );
+        y += 6;
+      }
+    }
 
-    y += 7;
-  });
+    if (options.includeActivity) {
+      drawSectionHeader("Recent RFID Activity");
 
-  y += 10;
+      const confirmedLogs = (reportLogs.filter((log) => log.action === "ENTER" || log.action === "EXIT")
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 30));
+      const activityRows = confirmedLogs.length > 0 ? confirmedLogs : reportLogs.slice(0, 30);
 
-  // OUTSIDE
-  doc.setFontSize(14);
+      const activityTableX = margin;
+      const activityCols = {
+        date: 25,
+        time: 18,
+        asset: 31,
+        uid: 31,
+        movement: 17,
+        destination: 33,
+      };
+      const activityWidth = Object.values(activityCols).reduce((sum, width) => sum + width, 0);
+      const activityHeaders = ["Date", "Time", "Asset", "UID", "Movement", "Destination"];
 
-  doc.text(
-    `Assets Outside: ${exportedOutsideAssets.length}`,
-    20,
-    y
-  );
+      const drawActivityHeader = (x: number, headerY: number) => {
+        doc.setFillColor(226, 232, 240);
+        doc.rect(x, headerY, activityWidth, 8, "F");
+        doc.setDrawColor(148, 163, 184);
+        doc.rect(x, headerY, activityWidth, 8, "S");
 
-  y += 10;
+        let headerX = x;
+        activityHeaders.forEach((label, index) => {
+          const width = Object.values(activityCols)[index] ?? 20;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.2);
+          doc.text(label, headerX + 2, headerY + 5.5);
+          headerX += width;
+        });
+      };
 
-  exportAssets.filter((asset) => asset.currentRoom === "Outside").forEach((asset) => {
-    addPageIfNeeded(12);
-    drawAssetNameLine(
-      "• ",
-      asset.assetName,
-      ` — UID: ${asset.uid}`,
-      25,
-      y
-    );
+      const drawActivityRow = (log: any, rowY: number) => {
+        const rowX = activityTableX;
+        const dateValue = new Date(log.createdAt);
+        const dateText = Number.isNaN(dateValue.getTime()) ? "N/A" : dateValue.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const timeText = Number.isNaN(dateValue.getTime()) ? "N/A" : dateValue.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        const assetName = log.assetName || "Unknown Asset";
+        const movement = log.action === "EXIT" ? "EXIT" : "ENTER";
+        const destination = log.action === "EXIT" ? "Outside" : log.toRoom || "Room1";
 
-    y += 7;
-  });
-  }
+        const fieldSets = [dateText, timeText, assetName, log.uid || "N/A", movement, destination];
 
-  if (options.includeActivity) {
-  y += 15;
+        let cellX = rowX;
+        let maxLines = 1;
+        const textData = fieldSets.map((value, index) => {
+          const width = Object.values(activityCols)[index] ?? 20;
+          const lines = doc.splitTextToSize(String(value), width - 4);
+          maxLines = Math.max(maxLines, lines.length);
+          return { value: lines, width };
+        });
 
-// TOTAL SCANS TODAY
-  addPageIfNeeded(25);
-  doc.setFontSize(14);
+        const rowHeight = Math.max(11, maxLines * 4 + 5);
+        doc.setFillColor(255, 255, 255);
+        doc.rect(rowX, rowY, activityWidth, rowHeight, "F");
+        doc.setDrawColor(203, 213, 225);
+        doc.rect(rowX, rowY, activityWidth, rowHeight, "S");
 
-    doc.text(
-    `Total Scans Today: ${
-    reportLogs.filter((log) => {
-        const today = new Date().toDateString();
+        textData.forEach(({ value, width }) => {
+          const startX = cellX;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(7);
+          const lineHeight = 4;
+          const topOffset = rowY + 5 + (rowHeight - (value.length * lineHeight)) / 2;
+          doc.text(value, startX + 2, topOffset);
+          cellX += width;
+        });
 
-        return (
-        new Date(log.createdAt).toDateString() === today
-        );
-    }).length
-    }`,
-    20,
-    y
-    );
+        return rowHeight;
+      };
 
-    y += 15;
+      if (activityRows.length === 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text("No RFID activity recorded for this export.", margin, y);
+        y += 10;
+      } else {
+        let activityY = y;
+        drawActivityHeader(activityTableX, activityY);
+        activityY += 9;
 
-  // TOTAL SCANS
-  addPageIfNeeded(25);
-  doc.setFontSize(14);
+        for (const log of activityRows) {
+          const estimatedRowHeight = Math.max(
+            11,
+            Math.max(
+              doc.splitTextToSize(new Date(log.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), activityCols.date - 4).length,
+              doc.splitTextToSize(log.assetName || "Unknown Asset", activityCols.asset - 4).length,
+              doc.splitTextToSize(log.uid || "N/A", activityCols.uid - 4).length,
+              doc.splitTextToSize(log.action === "EXIT" ? "EXIT" : "ENTER", activityCols.movement - 4).length,
+              doc.splitTextToSize((log.action === "EXIT" ? "Outside" : log.toRoom) || "Room1", activityCols.destination - 4).length
+            ) * 4 + 6
+          );
 
-  doc.text(
-    `Total Scans: ${reportLogs.length}`,
-    20,
-    y
-  );
+          if (activityY + estimatedRowHeight > pageHeight - 16) {
+            doc.addPage();
+            activityY = 20;
+            drawActivityHeader(activityTableX, activityY);
+            activityY += 9;
+          }
 
-  y += 15;
+          const rowHeight = drawActivityRow(log, activityY);
+          activityY += rowHeight + 1;
+        }
 
-  // RECENT ACTIVITY
-  addPageIfNeeded(25);
-  doc.setFontSize(16);
-  doc.text("Recent RFID Activity", 20, y);
+        y = activityY + 11;
+      }
+    }
 
-  y += 10;
-
-  reportLogs.slice(0, 6).forEach((log) => {
-    addPageIfNeeded(25);
-    doc.setFontSize(11);
-
-    const status =
-      log.action === "EXIT"
-        ? "Outside"
-        : log.toRoom;
-
-    drawAssetNameLine(
-      "",
-      log.assetName || "Unknown Asset",
-      ` | UID: ${log.uid} | ${status}`,
-      20,
-      y
-    );
-
-    y += 7;
-
-    doc.text(
-      `${new Date(log.createdAt).toLocaleString()}`,
-      25,
-      y
-    );
-
-    y += 10;
-  });
-  }
-
-  doc.save("Asset-Report.pdf");
-};
+    drawFooterForAllPages();
+    doc.save("Asset-Report.pdf");
+  };
 
   return (
     <div className="space-y-8">
@@ -565,7 +851,14 @@ doc.text(
                   ["custom", "Custom Selection", "Choose assets and report filters manually"],
                 ].map(([value, label, description]) => (
                   <label key={value} className="flex items-start gap-2">
-                    <input type="radio" name="exportScope" value={value} checked={exportScope === value} onChange={() => setExportScope(value as ExportScope)} className="mt-1" />
+                    <input
+                      type="radio"
+                      name="exportScope"
+                      value={value}
+                      checked={exportScope === value}
+                      onChange={() => setExportScope(value as ExportScope)}
+                      className="mt-1"
+                    />
                     <span><span className="font-semibold">{label}</span><span className="block text-xs text-gray-500">{description}</span></span>
                   </label>
                 ))}

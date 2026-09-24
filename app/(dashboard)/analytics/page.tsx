@@ -13,6 +13,12 @@ type ScanLog = {
   createdAt: string;
 };
 
+type UnregisteredScan = {
+  uid: string;
+  scanner: string;
+  lastSeenAt: string;
+};
+
 function generateUID(): string {
   const prefix = "E2003412017A1101890A1C";
   const suffix = Math.floor(Math.random() * 90 + 10).toString();
@@ -38,6 +44,7 @@ function getCurrentDate(): string {
 
 export default function AnalyticsPage() {
   const [logs, setLogs] = useState<ScanLog[]>([]);
+  const [unregisteredScans, setUnregisteredScans] = useState<UnregisteredScan[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<ScanLog[]>([]);
   const [searchAsset, setSearchAsset] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("All");
@@ -51,12 +58,18 @@ export default function AnalyticsPage() {
     const response = await fetch(
       "/api/scanner/logs"
     );
+    const unregisteredResponse = await fetch("/api/scanner/unregistered");
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
+    const unregisteredData = await unregisteredResponse.json();
+
+    if (Array.isArray(unregisteredData)) {
+      setUnregisteredScans(unregisteredData);
+    }
 
     if (Array.isArray(data)) {
       setLogs(
@@ -98,6 +111,24 @@ export default function AnalyticsPage() {
     window.removeEventListener("keydown", handleKey);
   };
 }, []);
+
+  const removeUnregisteredScan = async (uid?: string) => {
+    if (!uid && !window.confirm("Clear all unregistered RFID tags?")) return;
+
+    const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
+    const response = await fetch(`/api/scanner/unregistered${query}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      console.error("Failed to clear unregistered RFID tags");
+      return;
+    }
+
+    setUnregisteredScans((scans) =>
+      uid ? scans.filter((scan) => scan.uid !== uid) : []
+    );
+  };
 
   // Filter logs by room, search, and date range
   useEffect(() => {
@@ -191,6 +222,50 @@ export default function AnalyticsPage() {
         <p className="text-sm text-red-500 mt-2">
           Press R to reset
         </p>
+
+        {unregisteredScans.length > 0 && (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-amber-900">
+                  Unregistered RFID tags
+                </h2>
+                <p className="mt-1 text-sm text-amber-800">
+                  Register these UIDs to add them to asset tracking.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeUnregisteredScan()}
+                className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {unregisteredScans.map((scan) => (
+                <div
+                  key={scan.uid}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-gray-900">{scan.uid}</span>
+                  <span className="text-gray-600">
+                    Last detected by {scan.scanner} scanner
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeUnregisteredScan(scan.uid)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-lg text-gray-500 hover:bg-red-100 hover:text-red-700"
+                    aria-label={`Remove unregistered UID ${scan.uid}`}
+                    title="Remove UID"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Card */}

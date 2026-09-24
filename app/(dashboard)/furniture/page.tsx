@@ -8,6 +8,8 @@ import { AssetListControls, useAssetListControls } from "@/components/AssetListC
 export default function FurniturePage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [fullImage, setFullImage] = useState<string | null>(null);
 
   const getStatusBadgeClass = (status: string): string => {
     switch (status) {
@@ -17,6 +19,19 @@ export default function FurniturePage() {
         return "bg-yellow-100 text-yellow-800";
       case "inactive":
         return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-red-100 text-red-800";
+    }
+  };
+
+  const getConditionBadgeClass = (condition: string): string => {
+    switch (condition) {
+      case "new":
+        return "bg-blue-100 text-blue-800";
+      case "good":
+        return "bg-green-100 text-green-800";
+      case "fair":
+        return "bg-yellow-100 text-yellow-800";
       default:
         return "bg-red-100 text-red-800";
     }
@@ -62,6 +77,8 @@ export default function FurniturePage() {
                 assetStatus: tag.assetStatus || "active",
 
                 condition: tag.condition || "good",
+
+                description: tag.description || "",
 
                 image: tag.image || "",
 
@@ -117,19 +134,19 @@ export default function FurniturePage() {
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <p className="text-gray-500 text-sm">Total Furniture</p>
+          <p className="text-gray-500 text-sm">Total Assets</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">{visibleAssets.length}</p>
         </div>
         <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <p className="text-gray-500 text-sm">Active Furniture</p>
+          <p className="text-gray-500 text-sm">Active Assets</p>
           <p className="text-3xl font-bold text-primary-500 mt-2">
             {visibleAssets.filter((a) => a.assetStatus === "active").length}
           </p>
         </div>
         <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <p className="text-gray-500 text-sm">RFID Tracked</p>
-          <p className="text-3xl font-bold text-blue-600 mt-2">
-            {visibleAssets.filter((a) => a.rfidUid).length}
+          <p className="text-gray-500 text-sm">Maintenance Due</p>
+          <p className="text-3xl font-bold text-red-600 mt-2">
+            {visibleAssets.filter((a) => a.assetStatus === "maintenance").length}
           </p>
         </div>
       </div>
@@ -178,26 +195,26 @@ export default function FurniturePage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Name
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
+                    Asset Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Image
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Category
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Date Registered
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Location
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-gray-900">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    RFID UID
+                    Condition
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Actions
@@ -208,28 +225,28 @@ export default function FurniturePage() {
                 {visibleAssets.map((asset) => (
                   <tr
                     key={asset.id}
-                    className="border-b border-gray-200 hover:bg-gray-50 transition"
+                    className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                    <td className="px-8 py-5 text-sm text-gray-900 font-medium">
                       {asset.name}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-8 py-5 text-sm text-gray-600">
                       {asset.image ? (
                         <img src={asset.image} alt={asset.name} className="h-12 w-12 rounded object-cover" />
                       ) : (
                         <span>No image</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-8 py-5 text-sm text-gray-600">
                       {asset.category}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-8 py-5 text-sm text-gray-600">
                       {asset.dateRegistered}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-8 py-5 text-sm text-gray-600">
                       {asset.location}
                     </td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-8 py-5 text-sm">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(asset.assetStatus)}`}
                       >
@@ -237,10 +254,41 @@ export default function FurniturePage() {
                           asset.assetStatus.slice(1)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {asset.rfidUid || "N/A"}
+                    <td className="px-8 py-5 text-sm">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${getConditionBadgeClass(asset.condition)}`}
+                      >
+                        {asset.condition.charAt(0).toUpperCase() +
+                          asset.condition.slice(1)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-sm flex gap-2">
+                      <button
+                        onClick={() => setSelectedAsset(asset)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded transition"
+                        aria-label={`View ${asset.name}`}
+                        title="View asset"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                          />
+                        </svg>
+                      </button>
                       <button className="p-2 text-primary-600 hover:bg-primary-50 rounded transition">
                         <svg
                           className="w-4 h-4"
@@ -295,6 +343,7 @@ export default function FurniturePage() {
                                     assetStatus: tag.assetStatus || "active",
 
                                     condition: tag.condition || "good",
+                                    description: tag.description || "",
                                     image: tag.image || "",
 
                                     createdAt: tag.createdAt,
@@ -371,6 +420,68 @@ export default function FurniturePage() {
           </div>
         )}
       </div>
+
+      {selectedAsset && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">Asset Details</h2>
+              <button
+                onClick={() => setSelectedAsset(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+                aria-label="Close asset details"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4 text-sm">
+              {selectedAsset.image ? (
+                <button
+                  type="button"
+                  onClick={() => setFullImage(selectedAsset.image || null)}
+                  className="block w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  aria-label={`View full image of ${selectedAsset.name}`}
+                >
+                  <img src={selectedAsset.image} alt={selectedAsset.name} className="h-48 w-full rounded-lg object-contain bg-gray-100" />
+                </button>
+              ) : (
+                <div className="flex h-32 items-center justify-center rounded-lg bg-gray-100 text-gray-500">No image</div>
+              )}
+              <div><p className="font-semibold text-gray-700">Asset Name</p><p className="text-gray-600">{selectedAsset.name}</p></div>
+              <div><p className="font-semibold text-gray-700">RFID UID</p><p className="text-gray-600">{selectedAsset.rfidUid || "N/A"}</p></div>
+              <div><p className="font-semibold text-gray-700">Location</p><p className="text-gray-600">{selectedAsset.location}</p></div>
+              <div><p className="font-semibold text-gray-700">Status</p><p className="text-gray-600">{selectedAsset.assetStatus}</p></div>
+              <div><p className="font-semibold text-gray-700">Condition</p><p className="text-gray-600">{selectedAsset.condition}</p></div>
+              <div><p className="font-semibold text-gray-700">Description</p><p className="text-gray-600">{selectedAsset.description || "No description provided"}</p></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fullImage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6"
+          onClick={() => setFullImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Full asset image"
+        >
+          <button
+            type="button"
+            onClick={() => setFullImage(null)}
+            className="absolute right-6 top-6 text-4xl leading-none text-white hover:text-gray-300"
+            aria-label="Close full image"
+          >
+            ×
+          </button>
+          <img
+            src={fullImage}
+            alt="Full asset"
+            className="max-h-[90vh] max-w-[90vw] object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

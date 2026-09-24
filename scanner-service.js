@@ -1,70 +1,54 @@
 const { SerialPort } = require("serialport");
 const { ReadlineParser } = require("@serialport/parser-readline");
 
-const port = new SerialPort({
-  path: "COM5",
-  baudRate: 9600,
-});
+const scanners = [
+  { path: "COM5", side: "inside" },
+  { path: "COM6", side: "outside" },
+];
 
-const parser = port.pipe(
-  new ReadlineParser({
-    delimiter: "\r\n",
-  })
-);
+const ports = scanners.map(({ path, side }) => {
+  const port = new SerialPort({ path, baudRate: 9600 });
+  const parser = port.pipe(new ReadlineParser({ delimiter: "\r\n" }));
 
-port.on("open", () => {
-  console.log("✅ RFID Scanner Connected on COM5");
-});
+  port.on("open", () => {
+    console.log(`✅ RFID Scanner Connected on ${path} (${side})`);
+  });
 
-port.on("error", (err) => {
-  console.error("❌ Serial error:", err.message);
+  port.on("error", (err) => {
+    console.error(`❌ Serial error on ${path}:`, err.message);
+  });
+
+  parser.on("data", (uid) => handleScan(uid, side));
+  return port;
 });
 
 process.on("SIGINT", () => {
   console.log("🔄 Closing serial port...");
-  port.close((err) => {
-    if (err) {
-      console.error("❌ Error closing port:", err.message);
-    } else {
-      console.log("✅ Serial port closed");
-    }
-    process.exit(0);
-  });
+  closePorts();
 });
 
 process.on("SIGTERM", () => {
   console.log("🔄 Closing serial port...");
-  port.close((err) => {
-    if (err) {
-      console.error("❌ Error closing port:", err.message);
-    } else {
-      console.log("✅ Serial port closed");
-    }
-    process.exit(0);
-  });
+  closePorts();
 });
 
-let lastUID = "";
-let lastScanTime = 0;
+function closePorts() {
+  let remaining = ports.length;
+  ports.forEach((port) => {
+    port.close((err) => {
+      if (err) console.error("❌ Error closing port:", err.message);
+      remaining -= 1;
+      if (remaining === 0) process.exit(0);
+    });
+  });
+}
 
-parser.on("data", async (uid) => {
+async function handleScan(uid, scanner) {
   uid = uid.replace(/[^0-9]/g, "").trim();
 
   if (!uid) return;
-  const now = Date.now();
 
-if (
-  uid === lastUID &&
-  now - lastScanTime < 3000
-) {
-  console.log("⏳ Duplicate scan ignored:", uid);
-  return;
-}
-
-lastUID = uid;
-lastScanTime = now;
-
-  console.log("📡 Scan detected:", uid);
+  console.log(`📡 Scan detected on ${scanner}:`, uid);
 
   try {
     const response = await fetch(
@@ -77,6 +61,7 @@ lastScanTime = now;
         body: JSON.stringify({
           uid,
           room: "Room1",
+          scanner,
         }),
       }
     );
@@ -87,4 +72,4 @@ lastScanTime = now;
   } catch (err) {
     console.error("❌ API Error:", err.message);
   }
-});
+}

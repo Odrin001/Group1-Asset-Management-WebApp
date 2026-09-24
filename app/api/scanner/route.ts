@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/mongodb";
 
 import RFIDTag from "@/models/RFIDTag";
 import ScanLog from "@/models/ScanLog";
+import UnregisteredScan from "@/models/UnregisteredScan";
+import { processScannerDetection } from "@/lib/scanner-state";
 
 export async function POST(req: Request) {
   try {
@@ -10,13 +12,13 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    const { uid, room } = body;
+    const { uid, room, scanner } = body;
 
-    console.log("Scan request received", { uid, room });
+    console.log("Scan request received", { uid, room, scanner });
 
-    if (!uid || !room) {
+    if (!uid || !room || (scanner !== "inside" && scanner !== "outside")) {
       return NextResponse.json(
-        { message: "UID and room are required" },
+        { message: "UID, room, and a valid scanner side are required" },
         { status: 400 }
       );
     }
@@ -25,72 +27,66 @@ export async function POST(req: Request) {
     const tag = await RFIDTag.findOne({ uid });
 
     if (!tag) {
-      const now = new Date();
-
-      await ScanLog.create({
-        uid,
-        assetName: "Unregistered",
-        action: "UNKNOWN",
-        fromRoom: "-",
-        toRoom: room,
-
-        time: now.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-
-        date: now.toLocaleDateString("en-GB"),
-      });
+      await UnregisteredScan.findOneAndUpdate(
+        { uid },
+        { scanner, lastSeenAt: new Date() },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
 
       return NextResponse.json(
         {
-          message: "Unregistered RFID scanned",
+          message: "Unregistered RFID detected; movement not recorded",
+          uid,
         },
         { status: 200 }
-      );8
+      );
     }
 
-    let action = "";
-    let fromRoom = "";
-    let toRoom = "";
+    const transition = processScannerDetection({
+      uid,
+      currentRoom: tag.currentRoom,
+      scanner,
+      room,
+    });
 
-    // Determine ENTER or EXIT
-    if (tag.currentRoom === "Outside") {
-      action = "ENTER";
-      fromRoom = "-";
-      toRoom = room;
-
-      tag.currentRoom = room;
-    } else {
-      action = "EXIT";
-      fromRoom = tag.currentRoom;
-      toRoom = "-";
-
-      tag.currentRoom = "Outside";
+    if (transition.status === "pending") {
+      return NextResponse.json(
+        {
+          message: "Scanner detection pending confirmation",
+          uid,
+          scanner,
+        },
+        { status: 202 }
+      );
     }
 
-    // Save updated room
+    if (transition.status !== "confirmed") {
+      return NextResponse.json(
+        { message: "Scanner detection ignored; transition not confirmed" },
+        { status: 202 }
+      );
+    }
+
+    const { action, fromRoom, toRoom, nextRoom } = transition;
+    tag.currentRoom = nextRoom;
+
     await tag.save();
 
-                // Create scan log
-            const now = new Date();
+    const now = new Date();
 
-            await ScanLog.create({
-            uid,
-            assetName: tag.assetName,
-            action,
-            fromRoom,
-            toRoom,
-
-            time: now.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-            }),
-
-            date: now.toLocaleDateString("en-GB"),
-            });
+    await ScanLog.create({
+      uid,
+      assetName: tag.assetName,
+      action,
+      fromRoom,
+      toRoom,
+      time: now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+      date: now.toLocaleDateString("en-GB"),
+    });
 
     console.log("Scan log created", { uid, action, fromRoom, toRoom, assetName: tag.assetName });
 

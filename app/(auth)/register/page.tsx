@@ -77,7 +77,9 @@ export default function RegisterPage() {
         return;
       }
 
-      alert("Account created successfully! Please sign in.");
+      alert(
+        "Account created successfully. Your account is waiting for approval by the System Administrator."
+      );
 
       setFullName("");
       setEmail("");

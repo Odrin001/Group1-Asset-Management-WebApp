@@ -1,10 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-
 import RFIDTag from "@/models/RFIDTag";
+import { authorizeRequest } from "@/lib/authorization";
+import Notification from "@/models/Notification";
 
-export async function POST(req: Request) {
+function getInitialConditionNotice(condition: string) {
+  const normalized = condition.toLowerCase();
+  if (normalized === "fair") {
+    return { severity: "warning" as const, message: "Needs attention" };
+  }
+  if (normalized === "poor") {
+    return {
+      severity: "critical" as const,
+      message: "Maintenance recommended",
+    };
+  }
+  return { severity: "normal" as const, message: undefined };
+}
+
+export async function POST(req: NextRequest) {
   try {
+    const authorization = await authorizeRequest(req, ["admin", "sysadmin"]);
+    if (!authorization.authorized) {
+      return authorization.response;
+    }
+
     await connectDB();
 
     const body = await req.json();
@@ -38,6 +58,23 @@ export async function POST(req: Request) {
       description: description || "",
       ...(image ? { image } : {}),
       dateRegistered: new Date().toISOString().split('T')[0],
+    });
+
+    const maintenanceNotice = getInitialConditionNotice(newTag.condition);
+    await Notification.create({
+      type: "asset_created",
+      visibility: "admins",
+      assetId: String(newTag._id),
+      assetTagId: newTag.uid,
+      assetName: newTag.assetName,
+      actorName: authorization.user.fullName,
+      actorEmail: authorization.user.email,
+      message: `Registered ${newTag.assetName} by ${authorization.user.fullName}${
+        maintenanceNotice.message ? ` — ${maintenanceNotice.message}` : ""
+      }`,
+      severity: maintenanceNotice.severity,
+      maintenanceMessage: maintenanceNotice.message,
+      conditionAtEvent: newTag.condition,
     });
 
     return NextResponse.json(

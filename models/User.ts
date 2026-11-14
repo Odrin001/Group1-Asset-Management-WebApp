@@ -17,7 +17,12 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      default: "user"
+      default: "guest"
+    },
+    status: {
+      type: String,
+      enum: ["pending", "active", "rejected"],
+      default: "active"
     }
   },
   { timestamps: true }

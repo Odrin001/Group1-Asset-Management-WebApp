@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-
-const UserSchema = new mongoose.Schema({
-  fullName: String,
-  email: String,
-  password: String,
-  role: String,
-});
-
-const User =
-  mongoose.models.User ||
-  mongoose.model("User", UserSchema);
+import User from "@/models/User";
+import {
+  createSessionToken,
+  normalizeRole,
+  SESSION_COOKIE_NAME,
+  SESSION_DURATION_SECONDS,
+} from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(
@@ -33,12 +28,16 @@ export async function POST(req: Request) {
     await connectDB();
 
     const { email, password } = await req.json();
-
-    const user = await User.findOne({ email });
+    const normalizedEmail =
+      typeof email === "string" ? email.trim() : "";
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const user = await User.findOne({
+      email: new RegExp(`^${escapedEmail}$`, "i"),
+    });
 
     if (!user) {
       return NextResponse.json(
-        { message: "Invalid Email" },
+        { message: "Invalid email or password" },
         {
           status: 401,
           headers: {
@@ -48,11 +47,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const match = await bcrypt.compare(password, user.password);
+    const match =
+      typeof password === "string" &&
+      (await bcrypt.compare(password, user.password));
 
     if (!match) {
       return NextResponse.json(
-        { message: "Invalid Password" },
+        { message: "Invalid email or password" },
         {
           status: 401,
           headers: {
@@ -62,13 +63,34 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json(
+    if (user.status === "pending") {
+      return NextResponse.json(
+        { message: "Your account is waiting for approval by the System Administrator." },
+        { status: 403 }
+      );
+    }
+
+    if (user.status === "rejected") {
+      return NextResponse.json(
+        { message: "Your account has been rejected." },
+        { status: 403 }
+      );
+    }
+
+    const role = normalizeRole(user.role);
+    const token = await createSessionToken({
+      id: String(user._id),
+      email: user.email,
+      role,
+    });
+
+    const response = NextResponse.json(
       {
         message: "Login successful",
         user: {
           fullName: user.fullName,
           email: user.email,
-          role: user.role,
+          role,
         },
       },
       {
@@ -78,7 +100,17 @@ export async function POST(req: Request) {
         },
       }
     );
+    response.cookies.set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_DURATION_SECONDS,
+    });
+
+    return response;
   } catch (error) {
+    console.error("Error logging in:", error);
     return NextResponse.json(
       { message: "Server error" },
       {

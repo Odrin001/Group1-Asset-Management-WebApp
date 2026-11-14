@@ -1,18 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-
-const UserSchema = new mongoose.Schema({
-  fullName: String,
-  email: String,
-  password: String,
-  role: String,
-});
-
-const User =
-  mongoose.models.User ||
-  mongoose.model("User", UserSchema);
+import User from "@/models/User";
+import Notification from "@/models/Notification";
 
 export async function OPTIONS() {
   return NextResponse.json(
@@ -34,7 +24,14 @@ export async function POST(req: Request) {
 
     const { fullName, email, password } = await req.json();
 
-    if (!fullName || !email || !password) {
+    if (
+      typeof fullName !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !fullName.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return NextResponse.json(
         { message: "All fields are required" },
         {
@@ -46,7 +43,8 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!email.endsWith("@sdca.edu.ph")) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail.endsWith("@sdca.edu.ph")) {
       return NextResponse.json(
         { message: "Use SDCA email only" },
         {
@@ -58,7 +56,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUser = await User.findOne({ email });
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existingUser = await User.findOne({
+      email: new RegExp(`^${escapedEmail}$`, "i"),
+    });
 
     if (existingUser) {
       return NextResponse.json(
@@ -75,15 +76,24 @@ export async function POST(req: Request) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await User.create({
-      fullName,
-      email,
+      fullName: fullName.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
-      role: "user",
+      role: "guest",
+      status: "pending",
+    });
+
+    await Notification.create({
+      type: "account_registered",
+      visibility: "sysadmins",
+      actorName: fullName.trim(),
+      actorEmail: normalizedEmail,
+      message: `New account registration: ${fullName.trim()} (${normalizedEmail})`,
     });
 
     return NextResponse.json(
       {
-        message: "Account created successfully",
+        message: "Account created successfully. Your account is waiting for approval by the System Administrator.",
       },
       {
         status: 201,
@@ -93,6 +103,7 @@ export async function POST(req: Request) {
       }
     );
   } catch (error) {
+    console.error("Error registering account:", error);
     return NextResponse.json(
       { message: "Server error" },
       {

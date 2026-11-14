@@ -1,17 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useSearchParams, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { AuthProvider, useAuth } from "@/components/AuthProvider";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function DashboardLayout({
   children,
 }: {
   readonly children: React.ReactNode;
 }) {
-  const searchParams = useSearchParams();
+  return (
+    <AuthProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </AuthProvider>
+  );
+}
+
+function DashboardShell({ children }: { readonly children: React.ReactNode }) {
   const pathname = usePathname();
-  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  const router = useRouter();
+  const { role, loading, canManageAssets } = useAuth();
+  const [searchQuery, setSearchQuery] = useState("");
+  const canViewCurrentPage =
+    role === "sysadmin" ||
+    (role === "admin" && pathname !== "/accounts") ||
+    (role === "guest" &&
+      (pathname === "/dashboard" || pathname === "/furniture"));
+
+  useEffect(() => {
+    setSearchQuery(new URLSearchParams(window.location.search).get("search") || "");
+  }, []);
+
+  useEffect(() => {
+    if (!loading && role === null) {
+      router.replace("/login");
+    } else if (!loading && role && !canViewCurrentPage) {
+      router.replace("/dashboard");
+    }
+  }, [canViewCurrentPage, loading, role, router]);
 
   // Function to check if a route is active
   const isActive = (href: string) => {
@@ -119,10 +147,8 @@ export default function DashboardLayout({
             <span>Furniture</span>
           </Link>
           
-          <Link
-            href="/reports"
-            className={getNavLinkClasses("/reports")}
-          >
+          {canManageAssets && (
+            <Link href="/reports" className={getNavLinkClasses("/reports")}>
             <svg
               className="w-5 h-5 flex-shrink-0"
               fill="currentColor"
@@ -132,16 +158,24 @@ export default function DashboardLayout({
             </svg>
 
             <span>Asset Reports</span>
-          </Link>
+            </Link>
+          )}
+
+          {role === "sysadmin" && (
+            <Link href="/accounts" className={getNavLinkClasses("/accounts")}>
+              <span>Accounts</span>
+            </Link>
+          )}
 
         </nav>
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-700 space-y-3">
-            <Link
-              href="/analytics"
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-all shadow-sm"
-            >
+            {canManageAssets && (
+              <Link
+                href="/analytics"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-all shadow-sm"
+              >
               <svg
                 className="w-5 h-5 flex-shrink-0"
                 fill="currentColor"
@@ -153,7 +187,8 @@ export default function DashboardLayout({
               </svg>
 
               <span>Analytics</span>
-            </Link>
+              </Link>
+            )}
         </div>
       </div>
 
@@ -194,10 +229,23 @@ export default function DashboardLayout({
                 className="pl-10 pr-4 py-2 rounded-lg bg-white/15 border border-white/20 text-white placeholder-white/75 focus:outline-none focus:ring-2 focus:ring-white/60 focus:border-white w-72 transition"
               />
             </form>
+            {(role === "admin" || role === "sysadmin") && <NotificationBell />}
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm("Are you sure you want to sign out?")) {
-                  window.location.href = "/login";
+                  try {
+                    const response = await fetch("/api/auth/logout", {
+                      method: "POST",
+                    });
+                    if (!response.ok) {
+                      throw new Error("Sign out failed");
+                    }
+                    localStorage.removeItem("user");
+                    router.replace("/login");
+                  } catch (error) {
+                    console.error("Error signing out:", error);
+                    alert("Unable to sign out. Please try again.");
+                  }
                 }
               }}
               className="flex items-center gap-2 px-4 py-2 text-white bg-white/10 hover:bg-white/20 rounded-lg transition-all"
@@ -222,7 +270,13 @@ export default function DashboardLayout({
         </div>
 
         {/* Page Content */}
-        <div className="min-h-0 flex-1 overflow-auto p-8">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto p-8">
+          {loading ? (
+            <p className="text-gray-500">Loading your account...</p>
+          ) : canViewCurrentPage ? (
+            children
+          ) : null}
+        </div>
       </div>
     </div>
   );

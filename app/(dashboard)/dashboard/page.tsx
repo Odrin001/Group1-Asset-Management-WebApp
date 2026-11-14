@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Asset } from "@/lib/types";
 import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function DashboardPage() {
+  const { canManageAssets } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -127,7 +129,7 @@ export default function DashboardPage() {
             Manage all computer hardware and furniture assets
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        {canManageAssets && <div className="flex items-center gap-4">
           <Link
             href="/register-asset"
             className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-3"
@@ -147,7 +149,7 @@ export default function DashboardPage() {
             </svg>
             Add Asset
           </Link>
-        </div>
+        </div>}
       </div>
 
       {/* Quick Stats */}
@@ -335,7 +337,7 @@ export default function DashboardPage() {
                           />
                         </svg>
                       </button>
-                      <button
+                      {canManageAssets && <button
                             onClick={() => setEditingAsset(asset)}
                             className="p-2 text-primary-600 hover:bg-primary-50 rounded transition"
                           >
@@ -346,8 +348,8 @@ export default function DashboardPage() {
                         >
                           <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                         </svg>
-                      </button>
-                      <button
+                      </button>}
+                      {canManageAssets && <button
                         onClick={async () => {
                           if (
                             confirm(
@@ -406,7 +408,7 @@ export default function DashboardPage() {
                             clipRule="evenodd"
                           />
                         </svg>
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}
@@ -444,7 +446,7 @@ export default function DashboardPage() {
                   Clear search
                 </button>
               </>
-            ) : (
+            ) : canManageAssets ? (
             <Link
               href="/register-asset"
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition"
@@ -464,6 +466,8 @@ export default function DashboardPage() {
               </svg>
               Register Your First Asset
             </Link>
+            ) : (
+              <p className="text-gray-500">No assets found.</p>
             )}
           </div>
         )}
@@ -559,7 +563,7 @@ export default function DashboardPage() {
         />
       </div>
     )}
-    {editingAsset && (
+    {canManageAssets && editingAsset && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">

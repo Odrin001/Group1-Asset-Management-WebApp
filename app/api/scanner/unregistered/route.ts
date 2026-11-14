@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import UnregisteredScan from "@/models/UnregisteredScan";
+import { authorizeRequest } from "@/lib/authorization";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authorization = await authorizeRequest(request, ["admin", "sysadmin"]);
+    if (!authorization.authorized) {
+      return authorization.response;
+    }
+
     await connectDB();
     const scans = await UnregisteredScan.find().sort({ lastSeenAt: -1 });
     return NextResponse.json(scans, { status: 200 });
@@ -13,8 +19,13 @@ export async function GET() {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
+    const authorization = await authorizeRequest(request, ["admin", "sysadmin"]);
+    if (!authorization.authorized) {
+      return authorization.response;
+    }
+
     await connectDB();
     const uid = new URL(request.url).searchParams.get("uid");
 

@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Asset } from "@/lib/types";
 import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function FurniturePage() {
+  const { canManageAssets } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -108,7 +110,7 @@ export default function FurniturePage() {
             Manage all furniture assets
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        {canManageAssets && <div className="flex items-center gap-3">
           <Link
             href="/register-asset"
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium transition flex items-center gap-2"
@@ -128,7 +130,7 @@ export default function FurniturePage() {
             </svg>
             Add
           </Link>
-        </div>
+        </div>}
       </div>
 
       {/* Quick Stats */}
@@ -289,7 +291,7 @@ export default function FurniturePage() {
                           />
                         </svg>
                       </button>
-                      <button className="p-2 text-primary-600 hover:bg-primary-50 rounded transition">
+                      {canManageAssets && <button className="p-2 text-primary-600 hover:bg-primary-50 rounded transition">
                         <svg
                           className="w-4 h-4"
                           fill="currentColor"
@@ -297,8 +299,8 @@ export default function FurniturePage() {
                         >
                           <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                         </svg>
-                      </button>
-                      <button
+                      </button>}
+                      {canManageAssets && <button
                         onClick={async () => {
                           if (
                             confirm(
@@ -372,7 +374,7 @@ export default function FurniturePage() {
                             clipRule="evenodd"
                           />
                         </svg>
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}
@@ -398,7 +400,7 @@ export default function FurniturePage() {
               />
             </svg>
             <p className="text-gray-500 mb-4">No furniture assets found</p>
-            <Link
+            {canManageAssets && <Link
               href="/register-asset"
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition"
             >
@@ -416,7 +418,7 @@ export default function FurniturePage() {
                 />
               </svg>
               Register Your First Furniture
-            </Link>
+            </Link>}
           </div>
         )}
       </div>

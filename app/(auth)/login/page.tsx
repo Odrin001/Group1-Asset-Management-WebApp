@@ -60,8 +60,6 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem("user", JSON.stringify(data.user));
-
       router.push("/dashboard");
     } catch (error) {
       setError("Cannot connect to server");

@@ -1,10 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-
 import ScanLog from "@/models/ScanLog";
+import { authorizeRequest } from "@/lib/authorization";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authorization = await authorizeRequest(request, ["admin", "sysadmin"]);
+    if (!authorization.authorized) {
+      return authorization.response;
+    }
+
     await connectDB();
 
     const logs = await ScanLog.find()
@@ -25,8 +30,13 @@ export async function GET() {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const authorization = await authorizeRequest(request, ["admin", "sysadmin"]);
+    if (!authorization.authorized) {
+      return authorization.response;
+    }
+
     await connectDB();
     await ScanLog.deleteMany({});
 

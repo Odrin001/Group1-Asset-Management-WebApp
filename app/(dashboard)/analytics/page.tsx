@@ -45,6 +45,8 @@ function getCurrentDate(): string {
 export default function AnalyticsPage() {
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [unregisteredScans, setUnregisteredScans] = useState<UnregisteredScan[]>([]);
+  const [copiedUid, setCopiedUid] = useState("");
+  const [copyError, setCopyError] = useState("");
   const [filteredLogs, setFilteredLogs] = useState<ScanLog[]>([]);
   const [searchAsset, setSearchAsset] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("All");
@@ -128,6 +130,20 @@ export default function AnalyticsPage() {
     setUnregisteredScans((scans) =>
       uid ? scans.filter((scan) => scan.uid !== uid) : []
     );
+  };
+
+  const copyUnregisteredUid = async (uid: string) => {
+    try {
+      await navigator.clipboard.writeText(uid);
+      setCopiedUid(uid);
+      setCopyError("");
+      window.setTimeout(() => {
+        setCopiedUid((currentUid) => (currentUid === uid ? "" : currentUid));
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to copy unregistered RFID UID:", error);
+      setCopyError(`Could not copy ${uid}. Select the UID and copy it manually.`);
+    }
   };
 
   // Filter logs by room, search, and date range
@@ -223,49 +239,69 @@ export default function AnalyticsPage() {
           Press R to reset
         </p>
 
-        {unregisteredScans.length > 0 && (
-          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-amber-900">
-                  Unregistered RFID tags
+                  Recently Scanned Unregistered UIDs
                 </h2>
                 <p className="mt-1 text-sm text-amber-800">
-                  Register these UIDs to add them to asset tracking.
+                  Copy a UID to use it when registering an asset.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => removeUnregisteredScan()}
-                className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
-              >
-                Clear all
-              </button>
+              {unregisteredScans.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => removeUnregisteredScan()}
+                  className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                >
+                  Clear all
+                </button>
+              )}
             </div>
             <div className="mt-3 space-y-2">
-              {unregisteredScans.map((scan) => (
-                <div
-                  key={scan.uid}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm"
-                >
-                  <span className="font-medium text-gray-900">{scan.uid}</span>
-                  <span className="text-gray-600">
-                    Last detected by {scan.scanner} scanner
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeUnregisteredScan(scan.uid)}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-lg text-gray-500 hover:bg-red-100 hover:text-red-700"
-                    aria-label={`Remove unregistered UID ${scan.uid}`}
-                    title="Remove UID"
+              {unregisteredScans.length > 0 ? (
+                unregisteredScans.map((scan) => (
+                  <div
+                    key={scan.uid}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm"
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <span className="font-medium text-gray-900">{scan.uid}</span>
+                    <span className="text-gray-600">
+                      Last detected by {scan.scanner} scanner
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void copyUnregisteredUid(scan.uid)}
+                        className="rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                      >
+                        {copiedUid === scan.uid ? "Copied" : "Copy UID"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeUnregisteredScan(scan.uid)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-lg text-gray-500 hover:bg-red-100 hover:text-red-700"
+                        aria-label={`Remove unregistered UID ${scan.uid}`}
+                        title="Remove UID"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-lg bg-white px-3 py-2 text-sm text-gray-600">
+                  No unregistered UIDs right now. Scan an unregistered tag to see it here.
+                </p>
+              )}
             </div>
-          </div>
-        )}
+            {copyError && (
+              <p role="alert" className="mt-2 text-sm text-red-700">
+                {copyError}
+              </p>
+            )}
+        </div>
       </div>
 
       {/* Card */}

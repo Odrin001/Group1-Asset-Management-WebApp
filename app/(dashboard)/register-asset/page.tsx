@@ -1,9 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardBody, CardHeader, Input, Select, Textarea, Button } from "@/components";
+
+type UnregisteredScan = {
+  uid: string;
+  scanner: string;
+  lastSeenAt: string;
+};
+
+function isUnregisteredScan(value: unknown): value is UnregisteredScan {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const scan = value as Record<string, unknown>;
+  return (
+    typeof scan.uid === "string" &&
+    typeof scan.scanner === "string" &&
+    typeof scan.lastSeenAt === "string"
+  );
+}
 
 export default function RegisterAssetPage() {
   const router = useRouter();
@@ -11,6 +30,78 @@ export default function RegisterAssetPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [image, setImage] = useState("");
+  const [recentScans, setRecentScans] = useState<UnregisteredScan[]>([]);
+  const [isLoadingScans, setIsLoadingScans] = useState(true);
+  const [scanLoadError, setScanLoadError] = useState(false);
+  const [isClearingScans, setIsClearingScans] = useState(false);
+  const [scanClearError, setScanClearError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchRecentScans = async () => {
+      try {
+        const response = await fetch("/api/scanner/unregistered");
+        if (!response.ok) {
+          throw new Error(`Failed to fetch unregistered RFID scans: ${response.status}`);
+        }
+
+        const data: unknown = await response.json();
+        if (!Array.isArray(data)) {
+          throw new Error("Unregistered RFID scan response was not a list");
+        }
+
+        if (active) {
+          setRecentScans(data.filter(isUnregisteredScan).slice(0, 3));
+          setScanLoadError(false);
+        }
+      } catch (error) {
+        console.error("Error fetching unregistered RFID scans:", error);
+        if (active) {
+          setScanLoadError(true);
+        }
+      } finally {
+        if (active) {
+          setIsLoadingScans(false);
+        }
+      }
+    };
+
+    void fetchRecentScans();
+    const interval = setInterval(() => {
+      void fetchRecentScans();
+    }, 2000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const clearUnregisteredScans = async () => {
+    if (!window.confirm("Clear all unregistered RFID tags?")) {
+      return;
+    }
+
+    setIsClearingScans(true);
+    setScanClearError("");
+
+    try {
+      const response = await fetch("/api/scanner/unregistered", {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to clear unregistered RFID scans: ${response.status}`);
+      }
+
+      setRecentScans([]);
+    } catch (error) {
+      console.error("Error clearing unregistered RFID scans:", error);
+      setScanClearError("Could not clear unregistered RFID scans. Please try again.");
+    } finally {
+      setIsClearingScans(false);
+    }
+  };
 
   const [formData, setFormData] = useState({
     assetType: "",
@@ -168,6 +259,72 @@ export default function RegisterAssetPage() {
           <p className="text-gray-500 text-sm mt-1">Add a new asset to the system</p>
         </div>
       </div>
+
+      {/* Recent RFID Activity */}
+      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Recently Scanned Unregistered UIDs</h3>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-green-700">LIVE</span>
+            {recentScans.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void clearUnregisteredScans()}
+                disabled={isClearingScans}
+                className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isClearingScans ? "Clearing..." : "Clear all"}
+              </button>
+            )}
+          </div>
+        </div>
+        {scanClearError && (
+          <p role="alert" className="px-6 pt-3 text-sm text-red-700">
+            {scanClearError}
+          </p>
+        )}
+        {recentScans.length > 0 ? (
+          <div className="divide-y divide-gray-100">
+            {recentScans.map((scan) => (
+              <div
+                key={scan.uid}
+                className="flex flex-wrap items-center justify-between gap-3 px-6 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">
+                    UID: {scan.uid}
+                  </p>
+                  <p className="text-xs text-gray-500">Detected by {scan.scanner} scanner</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <time className="text-xs text-gray-500">
+                    {scan.lastSeenAt && !Number.isNaN(Date.parse(scan.lastSeenAt))
+                      ? new Date(scan.lastSeenAt).toLocaleString()
+                      : "Time unavailable"}
+                  </time>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((previous) => ({ ...previous, rfidUid: scan.uid }))
+                    }
+                    className="rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 hover:bg-green-50"
+                  >
+                    Use UID
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="px-6 py-4 text-sm text-gray-500">
+            {isLoadingScans
+              ? "Loading recent scans..."
+              : scanLoadError
+                ? "Unregistered RFID scans are unavailable."
+                : "Waiting for a new scan. Unregistered UIDs will appear here automatically."}
+          </p>
+        )}
+      </section>
 
       {/* Error Message */}
       {error && (

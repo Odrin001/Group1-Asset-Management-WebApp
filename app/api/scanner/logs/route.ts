@@ -12,9 +12,18 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const requestedLimit = limitParam === null ? 2000 : Number(limitParam);
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+      return NextResponse.json(
+        { message: "Limit must be a positive integer" },
+        { status: 400 }
+      );
+    }
+
     const logs = await ScanLog.find()
       .sort({ createdAt: -1 })
-      .limit(2000);
+      .limit(Math.min(requestedLimit, 2000));
 
     console.log("Fetched logs", logs.length);
 

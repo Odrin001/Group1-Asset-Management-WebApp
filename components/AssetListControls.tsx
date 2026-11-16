@@ -39,6 +39,9 @@ const defaultFilters: AssetFilters = {
   condition: "all",
 };
 
+const supportedStatuses = ["active", "inactive", "maintenance", "retired"];
+const supportedConditions = ["new", "good", "fair", "poor"];
+
 const sortLabels: Record<SortOption, string> = {
   default: "Default Sort",
   "name-asc": "Asset Name: A to Z",
@@ -57,7 +60,8 @@ const compareText = (first: string, second: string) =>
 
 export function useAssetListControls(
   assets: Asset[],
-  globalSearch = ""
+  globalSearch = "",
+  includeSupportedStatusAndConditionOptions = false
 ) {
   const [filters, setFilters] = useState<AssetFilters>(defaultFilters);
   const [sortOption, setSortOption] = useState<SortOption>("default");
@@ -67,12 +71,24 @@ export function useAssetListControls(
     [assets]
   );
   const statuses = useMemo(
-    () => Array.from(new Set(assets.map((asset) => asset.assetStatus).filter(Boolean))).sort(compareText),
-    [assets]
+    () =>
+      Array.from(
+        new Set([
+          ...(includeSupportedStatusAndConditionOptions ? supportedStatuses : []),
+          ...assets.map((asset) => asset.assetStatus).filter(Boolean),
+        ])
+      ).sort(compareText),
+    [assets, includeSupportedStatusAndConditionOptions]
   );
   const conditions = useMemo(
-    () => Array.from(new Set(assets.map((asset) => asset.condition).filter(Boolean))).sort(compareText),
-    [assets]
+    () =>
+      Array.from(
+        new Set([
+          ...(includeSupportedStatusAndConditionOptions ? supportedConditions : []),
+          ...assets.map((asset) => asset.condition).filter(Boolean),
+        ])
+      ).sort(compareText),
+    [assets, includeSupportedStatusAndConditionOptions]
   );
 
   const visibleAssets = useMemo(() => {

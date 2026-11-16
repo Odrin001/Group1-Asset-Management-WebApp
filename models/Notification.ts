@@ -9,6 +9,8 @@ const NotificationSchema = new mongoose.Schema(
         "asset_edited",
         "asset_deleted",
         "account_registered",
+        "asset_report",
+        "asset_info_reports_cleared",
       ],
       required: true,
     },
@@ -20,6 +22,7 @@ const NotificationSchema = new mongoose.Schema(
     assetId: String,
     assetTagId: String,
     assetName: String,
+    reportId: String,
     actorName: {
       type: String,
       required: true,

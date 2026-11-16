@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import RFIDTag from "@/models/RFIDTag";
 import { authorizeRequest } from "@/lib/authorization";
 import Notification from "@/models/Notification";
+import AssetLog from "@/models/AssetLog";
 
 function getInitialConditionNotice(condition: string) {
   const normalized = condition.toLowerCase();
@@ -58,7 +59,27 @@ export async function POST(req: NextRequest) {
       description: description || "",
       ...(image ? { image } : {}),
       dateRegistered: new Date().toISOString().split('T')[0],
+      createdBy: {
+        name: authorization.user.fullName,
+        email: authorization.user.email,
+      },
     });
+
+    try {
+      await AssetLog.create({
+        assetId: String(newTag._id),
+        tagId: newTag.uid,
+        assetName: newTag.assetName,
+        action: "CREATED",
+        who: {
+          name: authorization.user.fullName,
+          email: authorization.user.email,
+        },
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error("Error writing asset creation log:", error);
+    }
 
     const maintenanceNotice = getInitialConditionNotice(newTag.condition);
     await Notification.create({

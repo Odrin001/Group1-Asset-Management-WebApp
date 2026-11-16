@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import Notification from "@/models/Notification";
+import AccountLog from "@/models/AccountLog";
 
 export async function OPTIONS() {
   return NextResponse.json(
@@ -75,13 +76,29 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({
+    const account = await User.create({
       fullName: fullName.trim(),
       email: normalizedEmail,
       password: hashedPassword,
       role: "guest",
       status: "pending",
     });
+
+    try {
+      await AccountLog.create({
+        accountId: String(account._id),
+        accountName: account.fullName,
+        accountEmail: account.email,
+        action: "REGISTERED",
+        who: {
+          name: account.fullName,
+          email: account.email,
+        },
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error("Error writing account registration log:", error);
+    }
 
     await Notification.create({
       type: "account_registered",

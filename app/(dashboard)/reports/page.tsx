@@ -1,11 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import jsPDF from "jspdf";
+import { useAuth } from "@/components/AuthProvider";
+import {
+  ASSET_REPORT_STATUSES,
+  ASSET_REPORT_TYPES,
+} from "@/lib/asset-reports";
 
 type ExportScope = "whole" | "filtered" | "custom";
 
+type AssetInfoSummary = {
+  totalReports: number;
+  filteredTotal: number;
+  reportCounts: Record<string, number>;
+  lastSevenDaysCount: number;
+  typeCounts: Array<{ type: string; count: number }>;
+  mostReportedAssets: Array<{
+    assetId: string;
+    assetName: string;
+    tagId: string;
+    count: number;
+  }>;
+  latestReports: Array<{
+    _id: string;
+    assetName: string;
+    tagId: string;
+    type: string;
+    reporter: { name: string };
+    status: string;
+    createdAt: string;
+  }>;
+};
+
+function formatReportDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
+
+function formatReportStatus(status: string) {
+  return status.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function reportStatusClass(status: string) {
+  if (status === "resolved") return "bg-green-100 text-green-800";
+  if (status === "dismissed") return "bg-gray-100 text-gray-700";
+  if (status === "in_review") return "bg-blue-100 text-blue-800";
+  return "bg-amber-100 text-amber-800";
+}
+
 export default function ReportsPage() {
+  const { role } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<any[]>([]);
@@ -13,6 +59,22 @@ export default function ReportsPage() {
   const [searchAsset, setSearchAsset] = useState("");
   const [dateFromStr, setDateFromStr] = useState("");
   const [dateToStr, setDateToStr] = useState("");
+  const [activeReportTab, setActiveReportTab] = useState<"activity" | "assetInfo">("activity");
+  const [issueReportFilters, setIssueReportFilters] = useState({
+    from: "",
+    to: "",
+    type: "all",
+    status: "all",
+  });
+  const [issueReportSummary, setIssueReportSummary] =
+    useState<AssetInfoSummary | null>(null);
+  const [isLoadingIssueSummary, setIsLoadingIssueSummary] = useState(false);
+  const [issueSummaryError, setIssueSummaryError] = useState("");
+  const [showClearIssueReportsModal, setShowClearIssueReportsModal] =
+    useState(false);
+  const [isClearingIssueReports, setIsClearingIssueReports] = useState(false);
+  const [issueReportsClearError, setIssueReportsClearError] = useState("");
+  const [clearActivityError, setClearActivityError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [showExportOptions, setShowExportOptions] = useState(false);
@@ -35,6 +97,46 @@ export default function ReportsPage() {
   const [clearCountdown, setClearCountdown] = useState(0);
   const [isClearingReport, setIsClearingReport] = useState(false);
   const recordsPerPage = 15;
+
+  const loadIssueReportSummary = useCallback(async () => {
+    setIsLoadingIssueSummary(true);
+    setIssueSummaryError("");
+
+    try {
+      const params = new URLSearchParams();
+      if (issueReportFilters.from) params.set("from", issueReportFilters.from);
+      if (issueReportFilters.to) params.set("to", issueReportFilters.to);
+      if (issueReportFilters.type !== "all") {
+        params.set("type", issueReportFilters.type);
+      }
+      if (issueReportFilters.status !== "all") {
+        params.set("status", issueReportFilters.status);
+      }
+      const response = await fetch(
+        `/api/asset-reports/summary?${params.toString()}`
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to load issue report summary.");
+      }
+      setIssueReportSummary(data);
+    } catch (error) {
+      console.error("Error loading issue report summary:", error);
+      setIssueSummaryError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load issue report summary."
+      );
+    } finally {
+      setIsLoadingIssueSummary(false);
+    }
+  }, [issueReportFilters]);
+
+  useEffect(() => {
+    if (activeReportTab === "assetInfo") {
+      void loadIssueReportSummary();
+    }
+  }, [activeReportTab, loadIssueReportSummary]);
 
   useEffect(() => {
     if (!showClearReportModal || clearCountdown <= 0) return;
@@ -159,15 +261,17 @@ export default function ReportsPage() {
 
   const openClearReportModal = () => {
     setClearCountdown(5);
+    setClearActivityError("");
     setShowClearReportModal(true);
   };
 
   const handleClearAllReport = async () => {
     setIsClearingReport(true);
+    setClearActivityError("");
 
     try {
       const response = await fetch("/api/scanner/logs", { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to clear report");
+      if (!response.ok) throw new Error("Failed to clear RFID activity.");
 
       setLogs([]);
       setFilteredLogs([]);
@@ -175,8 +279,41 @@ export default function ReportsPage() {
       setShowClearReportModal(false);
     } catch (error) {
       console.error("Error clearing asset report:", error);
+      setClearActivityError(
+        error instanceof Error ? error.message : "Failed to clear RFID activity."
+      );
     } finally {
       setIsClearingReport(false);
+    }
+  };
+
+  const openClearIssueReportsModal = () => {
+    setIssueReportsClearError("");
+    setShowClearIssueReportsModal(true);
+  };
+
+  const handleClearAllIssueReports = async () => {
+    setIsClearingIssueReports(true);
+    setIssueReportsClearError("");
+
+    try {
+      const response = await fetch("/api/asset-reports", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to clear issue reports.");
+      }
+
+      setShowClearIssueReportsModal(false);
+      await loadIssueReportSummary();
+    } catch (error) {
+      console.error("Error clearing issue reports:", error);
+      setIssueReportsClearError(
+        error instanceof Error
+          ? error.message
+          : "Failed to clear issue reports."
+      );
+    } finally {
+      setIsClearingIssueReports(false);
     }
   };
 
@@ -617,47 +754,92 @@ export default function ReportsPage() {
     if (options.includeImages) {
       const imageAssets = exportAssets.filter((asset) => Boolean(asset.image));
       if (imageAssets.length > 0) {
+        doc.addPage();
+        y = 20;
         drawSectionHeader("Asset With Images");
 
         let imageRowY = y;
-        let imageIndex = 0;
+        const imageFrameWidth = 80;
+        const imageFrameHeight = 60;
 
-        for (const asset of imageAssets) {
-          if (y + 90 > pageHeight - 20) {
+        for (let imageIndex = 0; imageIndex < imageAssets.length; imageIndex += 2) {
+          const rowAssets = imageAssets.slice(imageIndex, imageIndex + 2);
+          const rowLayouts = rowAssets.map((asset) => {
+            const nameLines = doc.splitTextToSize(
+              asset.assetName || "Unnamed Asset",
+              imageFrameWidth - 4
+            );
+            const uidLines = doc.splitTextToSize(
+              `UID: ${asset.uid || "N/A"}`,
+              imageFrameWidth - 4
+            );
+            const nameY = 66;
+            const uidY = nameY + nameLines.length * 4.5 + 4;
+
+            return {
+              asset,
+              nameLines,
+              uidLines,
+              uidY,
+              height: Math.max(84, uidY + uidLines.length * 4.5 + 4),
+            };
+          });
+          const rowHeight = Math.max(...rowLayouts.map((layout) => layout.height));
+
+          if (imageRowY + rowHeight > pageHeight - margin) {
             doc.addPage();
             y = 20;
+            drawSectionHeader("Asset With Images");
+            imageRowY = y;
           }
 
-          const safeX = margin + (imageIndex % 2) * 92;
-          const safeY = y + Math.floor(imageIndex / 2) * 82;
+          for (const [columnIndex, layout] of rowLayouts.entries()) {
+            const safeX = margin + columnIndex * 92;
+            const safeY = imageRowY;
 
-          try {
-            const normalizedImage = await normalizeImageForPdf(asset.image);
-            doc.addImage(normalizedImage, "JPEG", safeX, safeY, 80, 60);
-          } catch (error) {
-            doc.setFillColor(248, 250, 252);
-            doc.rect(safeX, safeY, 80, 60, "F");
-            doc.setDrawColor(203, 213, 225);
-            doc.rect(safeX, safeY, 80, 60, "S");
+            try {
+              const normalizedImage = await normalizeImageForPdf(layout.asset.image);
+              const imageProperties = doc.getImageProperties(normalizedImage);
+              const scale = Math.min(
+                imageFrameWidth / imageProperties.width,
+                imageFrameHeight / imageProperties.height
+              );
+              const imageWidth = imageProperties.width * scale;
+              const imageHeight = imageProperties.height * scale;
+              doc.addImage(
+                normalizedImage,
+                "JPEG",
+                safeX + (imageFrameWidth - imageWidth) / 2,
+                safeY + 2 + (imageFrameHeight - imageHeight) / 2,
+                imageWidth,
+                imageHeight
+              );
+            } catch (error) {
+              doc.setFillColor(248, 250, 252);
+              doc.rect(safeX, safeY + 2, imageFrameWidth, imageFrameHeight, "F");
+              doc.setDrawColor(203, 213, 225);
+              doc.rect(safeX, safeY + 2, imageFrameWidth, imageFrameHeight, "S");
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(8);
+              doc.text("No Image", safeX + 25, safeY + 32);
+            }
+
             doc.setFont("helvetica", "bold");
+            doc.setFontSize(9);
+            doc.text(layout.nameLines, safeX + 2, safeY + 66);
+            doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
-            doc.text("No Image", safeX + 25, safeY + 30);
+            doc.text(layout.uidLines, safeX + 2, safeY + layout.uidY);
           }
 
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(9);
-          doc.text(asset.assetName || "Unnamed Asset", safeX + 2, safeY + 68);
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.text(`UID: ${asset.uid || "N/A"}`, safeX + 2, safeY + 75);
-
-          imageIndex += 1;
-          if (imageIndex % 2 === 0) {
-            imageRowY += 82;
-          }
+          imageRowY += rowHeight + 8;
         }
 
-        y = imageRowY + 94;
+        y = imageRowY;
+        if (options.includeLocationSummary || options.includeActivity) {
+          doc.addPage();
+          y = 20;
+        }
       }
     }
 
@@ -981,14 +1163,37 @@ export default function ReportsPage() {
 
             {/* Top */}
             <div className="p-6 border-b">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">
+              <div className="mb-4 flex items-center gap-2" role="tablist" aria-label="Report sections">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeReportTab === "activity"}
+                  onClick={() => setActiveReportTab("activity")}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    activeReportTab === "activity"
+                      ? "bg-red-600 text-white"
+                      : "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+                  }`}
+                >
                   Recent RFID Activity
-                </h2>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeReportTab === "assetInfo"}
+                  onClick={() => setActiveReportTab("assetInfo")}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    activeReportTab === "assetInfo"
+                      ? "bg-red-600 text-white"
+                      : "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+                  }`}
+                >
+                  Asset Info Reports
+                </button>
               </div>
 
-              {/* Filters Row */}
-              <div className="flex items-center gap-3 flex-wrap">
+              {activeReportTab === "activity" && (
+                <div className="flex items-center gap-3 flex-wrap">
                 {/* Search */}
                 <input
                   type="text"
@@ -1047,18 +1252,85 @@ export default function ReportsPage() {
                     Filter ({activeFilters})
                   </span>
                 )}
-              </div>
+                </div>
+              )}
+              {activeReportTab === "assetInfo" && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                    From:
+                    <input
+                      type="date"
+                      value={issueReportFilters.from}
+                      onChange={(event) =>
+                        setIssueReportFilters((filters) => ({
+                          ...filters,
+                          from: event.target.value,
+                        }))
+                      }
+                      className="border border-gray-300 rounded-lg px-4 py-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                    To:
+                    <input
+                      type="date"
+                      value={issueReportFilters.to}
+                      onChange={(event) =>
+                        setIssueReportFilters((filters) => ({
+                          ...filters,
+                          to: event.target.value,
+                        }))
+                      }
+                      className="border border-gray-300 rounded-lg px-4 py-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </label>
+                  <select
+                    value={issueReportFilters.type}
+                    onChange={(event) =>
+                      setIssueReportFilters((filters) => ({
+                        ...filters,
+                        type: event.target.value,
+                      }))
+                    }
+                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    aria-label="Filter issue reports by type"
+                  >
+                    <option value="all">All types</option>
+                    {ASSET_REPORT_TYPES.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={issueReportFilters.status}
+                    onChange={(event) =>
+                      setIssueReportFilters((filters) => ({
+                        ...filters,
+                        status: event.target.value,
+                      }))
+                    }
+                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    aria-label="Filter issue reports by status"
+                  >
+                    <option value="all">All statuses</option>
+                    {ASSET_REPORT_STATUSES.map((status) => (
+                      <option key={status} value={status}>{formatReportStatus(status)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {/* Empty State */}
-            {filteredLogs.length === 0 ? (
-              <div className="p-6 text-gray-500">
-                No matching RFID activity found.
-              </div>
-            ) : (
+            {activeReportTab === "activity" ? (
               <>
-                <div className="divide-y">
-                  {paginatedLogs.map((log, index) => (
+                {/* Empty State */}
+                {filteredLogs.length === 0 ? (
+                  <div className="p-6 text-gray-500">
+                    No matching RFID activity found.
+                  </div>
+                ) : (
+                  <>
+                    <div className="divide-y">
+                      {paginatedLogs.map((log, index) => (
                     <div
                       key={index}
                       className="p-6 flex items-center justify-between"
@@ -1096,11 +1368,11 @@ export default function ReportsPage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                    </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="p-6 border-t bg-gray-50 flex flex-col items-center gap-4">
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="p-6 border-t bg-gray-50 flex flex-col items-center gap-4">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -1140,19 +1412,172 @@ export default function ReportsPage() {
                       Page {currentPage} of {totalPages}
                     </p>
                   </div>
+                    )}
+                  </>
                 )}
               </>
+            ) : (
+              <div className="space-y-6 p-6">
+                {isLoadingIssueSummary ? (
+                  <p className="py-8 text-center text-gray-500">
+                    Loading issue report summary...
+                  </p>
+                ) : issueSummaryError ? (
+                  <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">
+                    {issueSummaryError}
+                  </p>
+                ) : !issueReportSummary ? (
+                  <p className="py-8 text-center text-gray-500">
+                    Issue report summary is unavailable.
+                  </p>
+                ) : issueReportSummary.totalReports === 0 ? (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-600">
+                    No issue reports yet.
+                  </div>
+                ) : issueReportSummary.filteredTotal === 0 ? (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-600">
+                    No issue reports match these filters.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                      {[
+                        ["Open", issueReportSummary.reportCounts.open, "text-amber-700"],
+                        ["In review", issueReportSummary.reportCounts.in_review, "text-blue-700"],
+                        ["Resolved", issueReportSummary.reportCounts.resolved, "text-green-700"],
+                        ["Dismissed", issueReportSummary.reportCounts.dismissed, "text-gray-700"],
+                        ["Last 7 days", issueReportSummary.lastSevenDaysCount, "text-red-700"],
+                      ].map(([label, count, color]) => (
+                        <div key={label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                          <p className="text-sm text-gray-500">{label}</p>
+                          <p className={`mt-2 text-3xl font-bold ${color}`}>{count}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <section className="rounded-xl border border-gray-200 p-5">
+                        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                          Reports by type
+                        </h3>
+                        <div className="space-y-4">
+                          {issueReportSummary.typeCounts.map((item) => {
+                            const maxCount = Math.max(
+                              1,
+                              ...issueReportSummary.typeCounts.map((entry) => entry.count)
+                            );
+                            return (
+                              <div key={item.type}>
+                                <div className="mb-1 flex justify-between gap-3 text-sm">
+                                  <span className="text-gray-700">{item.type}</span>
+                                  <span className="font-semibold text-gray-900">{item.count}</span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                  <div
+                                    className="h-full rounded-full bg-red-600"
+                                    style={{
+                                      width: `${(item.count / maxCount) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+
+                      <section className="rounded-xl border border-gray-200 p-5">
+                        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                          Most reported assets
+                        </h3>
+                        {issueReportSummary.mostReportedAssets.length === 0 ? (
+                          <p className="text-sm text-gray-500">No reports for these filters.</p>
+                        ) : (
+                          <div className="divide-y divide-gray-100">
+                            {issueReportSummary.mostReportedAssets.map((asset) => (
+                              <div
+                                key={asset.assetId}
+                                className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-gray-900">
+                                    {asset.assetName}
+                                  </p>
+                                  <p className="text-sm text-gray-500">Tag ID: {asset.tagId}</p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-700">
+                                  {asset.count}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    </div>
+
+                    <section className="overflow-hidden rounded-xl border border-gray-200">
+                      <div className="border-b bg-gray-50 px-5 py-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Latest reports</h3>
+                      </div>
+                      {issueReportSummary.latestReports.length === 0 ? (
+                        <p className="p-5 text-sm text-gray-500">No reports for these filters.</p>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {issueReportSummary.latestReports.map((report) => (
+                            <Link
+                              key={report._id}
+                              href={`/issue-reports?reportId=${encodeURIComponent(report._id)}`}
+                              className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition hover:bg-gray-50"
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold text-gray-900">
+                                  {report.assetName} <span className="font-normal text-gray-500">· {report.tagId}</span>
+                                </span>
+                                <span className="mt-1 block text-sm text-gray-600">
+                                  {report.type} · Reported by {report.reporter?.name || "Unknown"}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-3">
+                                <span className={`rounded-full px-3 py-1 text-xs font-medium ${reportStatusClass(report.status)}`}>
+                                  {formatReportStatus(report.status)}
+                                </span>
+                                <time
+                                  className="whitespace-nowrap text-sm text-gray-500"
+                                  dateTime={report.createdAt}
+                                >
+                                  {formatReportDate(report.createdAt)}
+                                </time>
+                              </span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
           <div className="flex justify-end pt-2">
-            <button
-              type="button"
-              onClick={openClearReportModal}
-              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 transition"
-            >
-              Clear All Asset Report
-            </button>
+            {role === "sysadmin" && activeReportTab === "activity" && (
+              <button
+                type="button"
+                onClick={openClearReportModal}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 transition"
+              >
+                Clear All RFID Activity
+              </button>
+            )}
+            {role === "sysadmin" && activeReportTab === "assetInfo" && (
+              <button
+                type="button"
+                onClick={openClearIssueReportsModal}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 transition"
+              >
+                Clear All Asset Info Reports
+              </button>
+            )}
           </div>
         </>
       )}
@@ -1169,11 +1594,17 @@ export default function ReportsPage() {
               ×
             </button>
             <h2 className="pr-8 text-xl font-bold text-gray-900">
-              Clear All Asset Report
+              Clear All RFID Activity
             </h2>
             <p className="mt-4 text-gray-700">
-              Are you sure that you want to clear everything that has been scanned?
+              This deletes all scan logs, including the room movement history shown in
+              Rooms/Locations, and cannot be undone.
             </p>
+            {clearActivityError && (
+              <p className="mt-4 text-sm text-red-700" role="alert">
+                {clearActivityError}
+              </p>
+            )}
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
@@ -1189,10 +1620,55 @@ export default function ReportsPage() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isClearingReport
-                  ? "Clearing..."
+                  ? "Deleting..."
                   : clearCountdown > 0
-                    ? `Ok (${clearCountdown})`
-                    : "Ok"}
+                    ? `Delete all scan logs (${clearCountdown})`
+                    : "Delete all scan logs"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearIssueReportsModal && role === "sysadmin" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <button
+              type="button"
+              aria-label="Close clear issue reports confirmation"
+              onClick={() => setShowClearIssueReportsModal(false)}
+              className="absolute right-4 top-3 text-2xl text-gray-500 hover:text-gray-900"
+            >
+              ×
+            </button>
+            <h2 className="pr-8 text-xl font-bold text-gray-900">
+              Clear All Asset Info Reports
+            </h2>
+            <p className="mt-4 text-gray-700">
+              This deletes all issue reports and their pictures and cannot be undone.
+            </p>
+            {issueReportsClearError && (
+              <p className="mt-4 text-sm text-red-700" role="alert">
+                {issueReportsClearError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowClearIssueReportsModal(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isClearingIssueReports}
+                onClick={() => void handleClearAllIssueReports()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isClearingIssueReports
+                  ? "Deleting..."
+                  : "Delete all issue reports"}
               </button>
             </div>
           </div>

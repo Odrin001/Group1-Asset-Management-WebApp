@@ -6,7 +6,6 @@ import {
   createSessionToken,
   normalizeRole,
   SESSION_COOKIE_NAME,
-  SESSION_DURATION_SECONDS,
 } from "@/lib/auth";
 
 export async function OPTIONS() {
@@ -105,7 +104,6 @@ export async function POST(req: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: SESSION_DURATION_SECONDS,
     });
 
     return response;

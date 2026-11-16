@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type NotificationItem = {
   _id: string;
@@ -9,6 +10,7 @@ type NotificationItem = {
   severity: "normal" | "notice" | "warning" | "critical";
   isRead: boolean;
   maintenanceMessage?: string;
+  reportId?: string;
 };
 
 function formatTimestamp(value: string) {
@@ -143,33 +145,51 @@ export default function NotificationBell() {
             </p>
           ) : (
             <ul className="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
-              {notifications.map((notification) => (
-                <li
-                  key={notification._id}
-                  className={`px-4 py-3 ${severityClasses(notification.severity)} ${
-                    notification.isRead ? "opacity-70" : ""
-                  }`}
-                >
-                  <p className="text-sm">{notification.message}</p>
-                  {notification.maintenanceMessage && (
-                    <span
-                      className={`mt-1 inline-block text-xs font-semibold ${
-                        notification.severity === "critical"
-                          ? "text-red-700"
-                          : "text-amber-700"
-                      }`}
+              {notifications.map((notification) => {
+                const content = (
+                  <>
+                    <p className="text-sm">{notification.message}</p>
+                    {notification.maintenanceMessage && (
+                      <span
+                        className={`mt-1 inline-block text-xs font-semibold ${
+                          notification.severity === "critical"
+                            ? "text-red-700"
+                            : "text-amber-700"
+                        }`}
+                      >
+                        {notification.maintenanceMessage}
+                      </span>
+                    )}
+                    <time
+                      className="mt-1 block text-xs text-slate-500"
+                      dateTime={notification.createdAt}
                     >
-                      {notification.maintenanceMessage}
-                    </span>
-                  )}
-                  <time
-                    className="mt-1 block text-xs text-slate-500"
-                    dateTime={notification.createdAt}
+                      {formatTimestamp(notification.createdAt)}
+                    </time>
+                  </>
+                );
+
+                return (
+                  <li
+                    key={notification._id}
+                    className={`px-4 py-3 ${severityClasses(notification.severity)} ${
+                      notification.isRead ? "opacity-70" : ""
+                    }`}
                   >
-                    {formatTimestamp(notification.createdAt)}
-                  </time>
-                </li>
-              ))}
+                    {notification.reportId ? (
+                      <Link
+                        href={`/issue-reports?reportId=${encodeURIComponent(notification.reportId)}`}
+                        onClick={() => setIsOpen(false)}
+                        className="block rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      content
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

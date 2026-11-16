@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
 import NotificationBell from "@/components/NotificationBell";
@@ -22,16 +22,11 @@ function DashboardShell({ children }: { readonly children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { role, loading, canManageAssets } = useAuth();
-  const [searchQuery, setSearchQuery] = useState("");
   const canViewCurrentPage =
     role === "sysadmin" ||
     (role === "admin" && pathname !== "/accounts") ||
     (role === "guest" &&
       (pathname === "/dashboard" || pathname === "/furniture"));
-
-  useEffect(() => {
-    setSearchQuery(new URLSearchParams(window.location.search).get("search") || "");
-  }, []);
 
   useEffect(() => {
     if (!loading && role === null) {
@@ -56,26 +51,6 @@ function DashboardShell({ children }: { readonly children: React.ReactNode }) {
     const inactiveClasses = "text-slate-300 hover:bg-slate-700 hover:border-l-4 hover:border-red-400 hover:text-white";
 
     return `${baseClasses} ${isActive(href) ? activeClasses : inactiveClasses}`;
-  };
-
-  // Update URL when search changes
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Update URL with search query for child pages to access
-    const url = new URL(window.location.href);
-    if (searchQuery) {
-      url.searchParams.set("search", searchQuery);
-    } else {
-      url.searchParams.delete("search");
-    }
-    window.history.pushState({}, "", url);
-    // Dispatch custom event for child components to listen
-    window.dispatchEvent(new CustomEvent("searchUpdate", { detail: searchQuery }));
   };
 
   return (
@@ -161,8 +136,70 @@ function DashboardShell({ children }: { readonly children: React.ReactNode }) {
             </Link>
           )}
 
+          {(role === "sysadmin" || role === "admin") && (
+            <div className="pt-2">
+              <div className="text-xs font-semibold text-slate-400 uppercase px-2 py-2 mb-2">
+                Edit Logs and Rooms/Locations
+              </div>
+              <div className="space-y-2">
+                <Link
+                  href="/edit-logs"
+                  className={getNavLinkClasses("/edit-logs")}
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828L14.5 9.5l-3 3-3-3 3-3 2.086-2.914zM7 12l3 3-7 7H0v-3l7-7z" />
+                  </svg>
+                  <span>Edit Logs</span>
+                </Link>
+                <Link
+                  href="/rooms"
+                  className={getNavLinkClasses("/rooms")}
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M10 2a1 1 0 011 1v1.08A6.002 6.002 0 0116.92 9H18a1 1 0 110 2h-1.08A6.002 6.002 0 0111 16.92V18a1 1 0 11-2 0v-1.08A6.002 6.002 0 013.08 11H2a1 1 0 110-2h1.08A6.002 6.002 0 019 3.08V2a1 1 0 011-1zm0 4a4 4 0 100 8 4 4 0 000-8z" />
+                  </svg>
+                  <span>Rooms/Locations</span>
+                </Link>
+                <Link
+                  href="/issue-reports"
+                  className={getNavLinkClasses("/issue-reports")}
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v3m0 4h.01M10.3 3.9 1.8 18.5A1.7 1.7 0 003.3 21h17.4a1.7 1.7 0 001.5-2.5L13.7 3.9a2 2 0 00-3.4 0z"
+                    />
+                  </svg>
+                  <span>Issue Reports</span>
+                </Link>
+              </div>
+            </div>
+          )}
+
           {role === "sysadmin" && (
             <Link href="/accounts" className={getNavLinkClasses("/accounts")}>
+              <svg
+                className="w-5 h-5 flex-shrink-0"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path d="M10 9a3 3 0 100-6 3 3 0 000 6zM4 16a4 4 0 118 0v1H4v-1zM14 7a2.5 2.5 0 012.5 2.5c0 .9-.48 1.68-1.2 2.12A5.98 5.98 0 0118 16v1h-4v-1a5.97 5.97 0 00-1.34-3.78A4.5 4.5 0 0014 7z" />
+              </svg>
               <span>Accounts</span>
             </Link>
           )}
@@ -207,28 +244,6 @@ function DashboardShell({ children }: { readonly children: React.ReactNode }) {
             <span className="opacity-90">Dashboard</span>
           </div>
           <div className="flex items-center gap-4">
-            <form onSubmit={handleSearchSubmit} className="relative">
-              <svg
-                className="w-5 h-5 text-white absolute left-3 top-1/2 transform -translate-y-1/2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search assets..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-                className="pl-10 pr-4 py-2 rounded-lg bg-white/15 border border-white/20 text-white placeholder-white/75 focus:outline-none focus:ring-2 focus:ring-white/60 focus:border-white w-72 transition"
-              />
-            </form>
             {(role === "admin" || role === "sysadmin") && <NotificationBell />}
             <button
               onClick={async () => {

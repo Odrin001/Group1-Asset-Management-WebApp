@@ -52,6 +52,18 @@ const RFIDTagSchema = new mongoose.Schema(
       type: String,
       default: () => new Date().toISOString().split('T')[0],
     },
+
+    createdBy: {
+      name: String,
+      email: String,
+    },
+
+    lastEditedAt: Date,
+
+    lastEditedBy: {
+      name: String,
+      email: String,
+    },
   },
   {
     timestamps: true,

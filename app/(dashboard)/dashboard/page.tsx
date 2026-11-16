@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Asset } from "@/lib/types";
 import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
 import { useAuth } from "@/components/AuthProvider";
+import AssetReportModal from "@/components/AssetReportModal";
 
 export default function DashboardPage() {
   const { canManageAssets } = useAuth();
@@ -129,27 +130,30 @@ export default function DashboardPage() {
             Manage all computer hardware and furniture assets
           </p>
         </div>
-        {canManageAssets && <div className="flex items-center gap-4">
-          <Link
-            href="/register-asset"
-            className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-3"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="flex items-center gap-4">
+          <AssetReportModal assets={hardwareAssets} />
+          {canManageAssets && (
+            <Link
+              href="/register-asset"
+              className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-3"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add Asset
-          </Link>
-        </div>}
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Asset
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Quick Stats */}

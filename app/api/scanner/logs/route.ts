@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const authorization = await authorizeRequest(request, ["admin", "sysadmin"]);
+    const authorization = await authorizeRequest(request, ["sysadmin"]);
     if (!authorization.authorized) {
       return authorization.response;
     }

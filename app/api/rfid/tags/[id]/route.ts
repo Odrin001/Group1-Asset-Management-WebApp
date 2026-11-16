@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import RFIDTag from "@/models/RFIDTag";
 import { authorizeRequest } from "@/lib/authorization";
 import Notification from "@/models/Notification";
+import AssetLog from "@/models/AssetLog";
 
 const CONDITION_LEVELS: Record<string, number> = {
   new: 0,
@@ -56,6 +57,22 @@ export async function DELETE(
         { message: "RFID tag not found" },
         { status: 404 }
       );
+    }
+
+    try {
+      await AssetLog.create({
+        assetId: String(deletedTag._id),
+        tagId: deletedTag.uid,
+        assetName: deletedTag.assetName,
+        action: "DELETED",
+        who: {
+          name: authorization.user.fullName,
+          email: authorization.user.email,
+        },
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error("Error writing asset deletion log:", error);
     }
 
     await Notification.create({
@@ -143,7 +160,22 @@ export async function PUT(
         newValue: notificationValue(field, newValue),
       }));
 
-    const updatedTag = await RFIDTag.findByIdAndUpdate(id, update, { new: true });
+    const updatedTag = await RFIDTag.findByIdAndUpdate(
+      id,
+      {
+        ...update,
+        ...(changedFields.length > 0
+          ? {
+              lastEditedAt: new Date(),
+              lastEditedBy: {
+                name: authorization.user.fullName,
+                email: authorization.user.email,
+              },
+            }
+          : {}),
+      },
+      { new: true }
+    );
 
     if (!updatedTag) {
       return NextResponse.json(
@@ -153,6 +185,58 @@ export async function PUT(
     }
 
     if (changedFields.length > 0) {
+      const fieldNames: Record<string, string> = {
+        assetName: "name",
+        category: "category",
+        currentRoom: "location",
+        quantity: "quantity",
+        assetStatus: "status",
+        condition: "condition",
+        description: "description",
+      };
+      const imageChanged = changedFields.some(
+        (change) => change.field === "image"
+      );
+      const previousImage =
+        imageChanged && typeof existingTag.image === "string"
+          ? existingTag.image
+          : "";
+      const previousImageTooLarge =
+        new TextEncoder().encode(previousImage).byteLength > 3 * 1024 * 1024;
+      const newImageTooLarge =
+        typeof body.image === "string" &&
+        new TextEncoder().encode(body.image).byteLength > 3 * 1024 * 1024;
+      const pictureTooLarge =
+        imageChanged && (previousImageTooLarge || newImageTooLarge);
+
+      try {
+        await AssetLog.create({
+          assetId: String(updatedTag._id),
+          tagId: updatedTag.uid,
+          assetName: updatedTag.assetName,
+          action: "EDITED",
+          who: {
+            name: authorization.user.fullName,
+            email: authorization.user.email,
+          },
+          timestamp: new Date(),
+          changedFields: changedFields
+            .filter((change) => change.field !== "image")
+            .map((change) => ({
+              field: fieldNames[change.field] || change.field,
+              oldValue: change.oldValue,
+              newValue: change.newValue,
+            })),
+          pictureChanged: imageChanged,
+          ...(!previousImageTooLarge && previousImage
+            ? { oldPicture: previousImage }
+            : {}),
+          pictureTooLarge,
+        });
+      } catch (error) {
+        console.error("Error writing asset edit log:", error);
+      }
+
       let severity: "normal" | "warning" | "critical" = "normal";
       let maintenanceMessage: string | undefined;
       const conditionChange = changedFields.find(

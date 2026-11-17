@@ -45,8 +45,6 @@ function getCurrentDate(): string {
 export default function AnalyticsPage() {
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [unregisteredScans, setUnregisteredScans] = useState<UnregisteredScan[]>([]);
-  const [copiedUid, setCopiedUid] = useState("");
-  const [copyError, setCopyError] = useState("");
   const [filteredLogs, setFilteredLogs] = useState<ScanLog[]>([]);
   const [searchAsset, setSearchAsset] = useState("");
   const [selectedRoom, setSelectedRoom] = useState("All");
@@ -130,20 +128,6 @@ export default function AnalyticsPage() {
     setUnregisteredScans((scans) =>
       uid ? scans.filter((scan) => scan.uid !== uid) : []
     );
-  };
-
-  const copyUnregisteredUid = async (uid: string) => {
-    try {
-      await navigator.clipboard.writeText(uid);
-      setCopiedUid(uid);
-      setCopyError("");
-      window.setTimeout(() => {
-        setCopiedUid((currentUid) => (currentUid === uid ? "" : currentUid));
-      }, 1500);
-    } catch (error) {
-      console.error("Failed to copy unregistered RFID UID:", error);
-      setCopyError(`Could not copy ${uid}. Select the UID and copy it manually.`);
-    }
   };
 
   // Filter logs by room, search, and date range
@@ -273,13 +257,6 @@ export default function AnalyticsPage() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => void copyUnregisteredUid(scan.uid)}
-                        className="rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
-                      >
-                        {copiedUid === scan.uid ? "Copied" : "Copy UID"}
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => removeUnregisteredScan(scan.uid)}
                         className="flex h-7 w-7 items-center justify-center rounded-full text-lg text-gray-500 hover:bg-red-100 hover:text-red-700"
                         aria-label={`Remove unregistered UID ${scan.uid}`}
@@ -296,11 +273,6 @@ export default function AnalyticsPage() {
                 </p>
               )}
             </div>
-            {copyError && (
-              <p role="alert" className="mt-2 text-sm text-red-700">
-                {copyError}
-              </p>
-            )}
         </div>
       </div>
 

@@ -120,7 +120,7 @@ export default function DashboardPage() {
     }, []);
 
   const hardwareAssets = assets.filter((asset) => asset.category?.toLowerCase() === "computer hardware");
-  const { filters, setFilters, visibleAssets: filteredAssets, categories, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(hardwareAssets, searchQuery);
+  const { filters, setFilters, visibleAssets: filteredAssets, categories, locationOptions, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(hardwareAssets, searchQuery, false, canManageAssets);
 
   return (
     <div className="space-y-8 p-8">
@@ -208,13 +208,14 @@ export default function DashboardPage() {
       {/* Table Section */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-visible shadow-sm">
         {/* Table Header with Action Buttons */}
-        <div className="px-8 py-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="px-8 py-6 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-gray-50">
           <h3 className="font-semibold text-gray-900 text-lg">Assets</h3>
           <div className="flex gap-3">
             <AssetListControls
               filters={filters}
               setFilters={setFilters}
               categories={categories}
+              locationOptions={locationOptions}
               statuses={statuses}
               conditions={conditions}
               sortOption={sortOption}

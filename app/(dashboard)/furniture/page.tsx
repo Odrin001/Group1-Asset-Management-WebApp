@@ -99,7 +99,7 @@ export default function FurniturePage() {
         fetchAssets();
       }, []);
 
-  const { filters, setFilters, visibleAssets, categories, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(assets, "", true);
+  const { filters, setFilters, visibleAssets, categories, locationOptions, statuses, conditions, sortOption, setSortOption, activeFilterCount, clearFilters } = useAssetListControls(assets, "", true, canManageAssets);
 
   return (
     <div className="space-y-6">
@@ -160,12 +160,13 @@ export default function FurniturePage() {
       {/* Table Section */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
         {/* Table Header with Action Buttons */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="px-6 py-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-gray-50">
           <h3 className="font-semibold text-gray-900">Furniture Assets</h3>
           <AssetListControls
             filters={filters}
             setFilters={setFilters}
             categories={categories}
+            locationOptions={locationOptions}
             statuses={statuses}
             conditions={conditions}
             sortOption={sortOption}

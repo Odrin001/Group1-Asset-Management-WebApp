@@ -4,6 +4,34 @@ import RFIDTag from "@/models/RFIDTag";
 import { authorizeRequest } from "@/lib/authorization";
 import Notification from "@/models/Notification";
 import AssetLog from "@/models/AssetLog";
+import { isRoomKey } from "@/models/Room";
+
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+
+function getImageValidationError(image: unknown): string | null {
+  if (image === undefined || image === null || image === "") {
+    return null;
+  }
+  if (typeof image !== "string") {
+    return "The image is invalid.";
+  }
+
+  const match = image.match(
+    /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/]*={0,2})$/i
+  );
+  if (!match) {
+    return "Choose a valid image file.";
+  }
+
+  const bytes = Buffer.from(match[1], "base64");
+  if (bytes.toString("base64") !== match[1]) {
+    return "Choose a valid image file.";
+  }
+  if (bytes.byteLength > MAX_IMAGE_BYTES) {
+    return "Asset image must be 3 MB or smaller.";
+  }
+  return null;
+}
 
 const CONDITION_LEVELS: Record<string, number> = {
   new: 0,
@@ -116,12 +144,30 @@ export async function PUT(
     const { id } = await params;
 
     const body = await request.json();
+    const imageError = getImageValidationError(body.image);
+    if (imageError) {
+      return NextResponse.json({ message: imageError }, { status: 400 });
+    }
+
     const existingTag = await RFIDTag.findById(id);
 
     if (!existingTag) {
       return NextResponse.json(
         { message: "RFID tag not found" },
         { status: 404 }
+      );
+    }
+
+    const locationChanged =
+      body.location !== undefined &&
+      body.location !== existingTag.currentRoom;
+    if (
+      locationChanged &&
+      (typeof body.location !== "string" || !isRoomKey(body.location))
+    ) {
+      return NextResponse.json(
+        { message: "Location must be an existing room key: Room1 or Outside." },
+        { status: 400 }
       );
     }
 

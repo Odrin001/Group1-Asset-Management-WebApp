@@ -12,6 +12,7 @@ import {
   ASSET_REPORT_TYPES,
 } from "@/lib/asset-reports";
 import { useAuth } from "@/components/AuthProvider";
+import { compressImageToDataUrl } from "@/lib/image-utils";
 
 type ReportableAsset = {
   id: string;
@@ -25,6 +26,7 @@ type AssetReportModalProps = {
 };
 
 const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
+const MAX_SOURCE_PICTURE_BYTES = 20 * 1024 * 1024;
 
 export default function AssetReportModal({ assets }: AssetReportModalProps) {
   const { role } = useAuth();
@@ -145,19 +147,24 @@ export default function AssetReportModal({ assets }: AssetReportModalProps) {
       if (pictureInputRef.current) pictureInputRef.current.value = "";
       return;
     }
-    if (file.size > MAX_PICTURE_BYTES) {
+    if (file.size > MAX_SOURCE_PICTURE_BYTES) {
       setPicture("");
-      setPictureError("Picture must be 2 MB or smaller.");
+      setPictureError("Picture must be 20 MB or smaller.");
       if (pictureInputRef.current) pictureInputRef.current.value = "";
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") setPicture(reader.result);
-    };
-    reader.onerror = () => setPictureError("The picture could not be read.");
-    reader.readAsDataURL(file);
+    try {
+      setPicture(await compressImageToDataUrl(file, MAX_PICTURE_BYTES));
+    } catch (imageError) {
+      setPicture("");
+      setPictureError(
+        imageError instanceof Error
+          ? imageError.message
+          : "The picture could not be processed."
+      );
+      if (pictureInputRef.current) pictureInputRef.current.value = "";
+    }
   }
 
   function clearPicture() {
@@ -441,7 +448,7 @@ export default function AssetReportModal({ assets }: AssetReportModalProps) {
                     htmlFor="asset-report-picture"
                     className="mb-1 block text-sm font-medium text-gray-700"
                   >
-                    Picture <span className="font-normal text-gray-500">(optional, max 2 MB)</span>
+                    Picture <span className="font-normal text-gray-500">(optional, max 20 MB; large photos are resized automatically)</span>
                   </label>
                   <input
                     id="asset-report-picture"

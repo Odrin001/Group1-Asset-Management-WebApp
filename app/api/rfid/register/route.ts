@@ -4,6 +4,34 @@ import RFIDTag from "@/models/RFIDTag";
 import { authorizeRequest } from "@/lib/authorization";
 import Notification from "@/models/Notification";
 import AssetLog from "@/models/AssetLog";
+import { isRoomKey } from "@/models/Room";
+
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+
+function getImageValidationError(image: unknown): string | null {
+  if (image === undefined || image === null || image === "") {
+    return null;
+  }
+  if (typeof image !== "string") {
+    return "The image is invalid.";
+  }
+
+  const match = image.match(
+    /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/]*={0,2})$/i
+  );
+  if (!match) {
+    return "Choose a valid image file.";
+  }
+
+  const bytes = Buffer.from(match[1], "base64");
+  if (bytes.toString("base64") !== match[1]) {
+    return "Choose a valid image file.";
+  }
+  if (bytes.byteLength > MAX_IMAGE_BYTES) {
+    return "Asset image must be 3 MB or smaller.";
+  }
+  return null;
+}
 
 function getInitialConditionNotice(condition: string) {
   const normalized = condition.toLowerCase();
@@ -32,6 +60,19 @@ export async function POST(req: NextRequest) {
 
     const { uid, assetName, currentRoom, category, quantity, assetStatus, condition, description, image } = body;
 
+    const newRoom = currentRoom === undefined ? "Outside" : currentRoom;
+    if (typeof newRoom !== "string" || !isRoomKey(newRoom)) {
+      return NextResponse.json(
+        { message: "Location must be an existing room key: Room1 or Outside." },
+        { status: 400 }
+      );
+    }
+
+    const imageError = getImageValidationError(image);
+    if (imageError) {
+      return NextResponse.json({ message: imageError }, { status: 400 });
+    }
+
     if (!uid || !assetName) {
       return NextResponse.json(
         { message: "UID and asset name are required" },
@@ -51,7 +92,7 @@ export async function POST(req: NextRequest) {
     const newTag = await RFIDTag.create({
       uid,
       assetName,
-      currentRoom: currentRoom || "Outside",
+      currentRoom: newRoom,
       category: category || "Furniture",
       quantity: quantity || 1,
       assetStatus: assetStatus || "active",

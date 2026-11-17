@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardBody, CardHeader, Input, Select, Textarea, Button } from "@/components";
+import { compressImageToDataUrl } from "@/lib/image-utils";
+import LocationSelect from "@/components/LocationSelect";
 
 type UnregisteredScan = {
   uid: string;
@@ -27,6 +29,7 @@ function isUnregisteredScan(value: unknown): value is UnregisteredScan {
 export default function RegisterAssetPage() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [image, setImage] = useState("");
@@ -35,6 +38,12 @@ export default function RegisterAssetPage() {
   const [scanLoadError, setScanLoadError] = useState(false);
   const [isClearingScans, setIsClearingScans] = useState(false);
   const [scanClearError, setScanClearError] = useState("");
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     let active = true;
@@ -104,7 +113,6 @@ export default function RegisterAssetPage() {
   };
 
   const [formData, setFormData] = useState({
-    assetType: "",
     name: "",
     category: "",
     quantity: "1",
@@ -134,11 +142,6 @@ export default function RegisterAssetPage() {
     setIsLoading(true);
 
     // Validate required fields
-    if (!formData.assetType.trim()) {
-      setError("Asset Type is required");
-      setIsLoading(false);
-      return;
-    }
     if (!formData.name.trim()) {
       setError("Asset Name is required");
       setIsLoading(false);
@@ -212,11 +215,6 @@ export default function RegisterAssetPage() {
       setIsLoading(false);
     }
   };
-
-  const assetTypeOptions = [
-    { value: "computer", label: "Computer Hardware" },
-    { value: "furniture", label: "Furniture" },
-  ];
 
   const conditionOptions = [
     { value: "new", label: "New" },
@@ -328,7 +326,11 @@ export default function RegisterAssetPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div
+          ref={errorRef}
+          role="alert"
+          className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"
+        >
           {error}
         </div>
       )}
@@ -351,30 +353,6 @@ export default function RegisterAssetPage() {
           />
           <CardBody>
             <div className="space-y-4">
-              <Select
-                label="Asset Type"
-                id="assetType"
-                value={formData.assetType}
-                onChange={handleInputChange}
-                options={assetTypeOptions}
-                required
-                helperText="Select the primary type of asset"
-                icon={
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4z" />
-                    <path
-                      fillRule="evenodd"
-                      d="M3 10a1 1 0 011-1h12a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                }
-              />
-
               <Input
                 label="Asset Name"
                 type="text"
@@ -402,7 +380,7 @@ export default function RegisterAssetPage() {
 
               <div>
                   <Select
-                    label="Category"
+                    label="Asset Type / Category"
                     id="category"
                     value={formData.category}
                     onChange={handleInputChange}
@@ -476,14 +454,15 @@ export default function RegisterAssetPage() {
           />
           <CardBody>
             <div className="space-y-4">
-              <Input
+              <LocationSelect
                 label="Location"
-                type="text"
                 id="location"
-                placeholder="e.g., Room 101, Lab A, Building 2"
                 value={formData.location}
-                onChange={handleInputChange}
+                onChange={(value) =>
+                  setFormData((previous) => ({ ...previous, location: value }))
+                }
                 required
+                helperText="Choose an existing room or location"
                 icon={
                   <svg
                     className="w-4 h-4"
@@ -647,25 +626,31 @@ export default function RegisterAssetPage() {
                   id="assetImage"
                   type="file"
                   accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
+                  onChange={async (e) => {
+                    const input = e.currentTarget;
+                    const file = input.files?.[0];
                     if (!file) {
                       setImage("");
                       return;
                     }
-                    if (file.size > 5 * 1024 * 1024) {
-                      setError("Asset image must be 5 MB or smaller");
-                      e.target.value = "";
+                    if (file.size > 20 * 1024 * 1024) {
+                      setError("Asset image must be 20 MB or smaller");
+                      input.value = "";
                       setImage("");
                       return;
                     }
                     setError("");
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                      const result = event.target?.result;
-                      if (typeof result === "string") setImage(result);
-                    };
-                    reader.readAsDataURL(file);
+                    try {
+                      setImage(await compressImageToDataUrl(file));
+                    } catch (imageError) {
+                      input.value = "";
+                      setImage("");
+                      setError(
+                        imageError instanceof Error
+                          ? imageError.message
+                          : "The picture could not be processed."
+                      );
+                    }
                   }}
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm text-gray-700"
                 />

@@ -6,6 +6,8 @@ import { Asset } from "@/lib/types";
 import { AssetListControls, useAssetListControls } from "@/components/AssetListControls";
 import { useAuth } from "@/components/AuthProvider";
 import AssetReportModal from "@/components/AssetReportModal";
+import { compressImageToDataUrl } from "@/lib/image-utils";
+import LocationSelect from "@/components/LocationSelect";
 
 export default function DashboardPage() {
   const { canManageAssets } = useAuth();
@@ -623,24 +625,18 @@ export default function DashboardPage() {
       />
     </div>
 
-    <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Location
-      </label>
-
-      <input
-        type="text"
-        value={editingAsset.location}
-        onChange={(e) =>
-          setEditingAsset({
-            ...editingAsset,
-            location: e.target.value,
-          })
-        }
-        className="w-full border rounded-lg p-3"
-        placeholder="Location"
-      />
-    </div>
+    <LocationSelect
+      label="Location"
+      id="edit-asset-location"
+      value={editingAsset.location}
+      onChange={(location) =>
+        setEditingAsset({ ...editingAsset, location })
+      }
+      required
+      labelContainerClassName="mb-2"
+      labelClassName="block text-sm font-semibold text-gray-700"
+      inputClassName="w-full border rounded-lg p-3"
+    />
 
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -761,22 +757,26 @@ export default function DashboardPage() {
     <input
       type="file"
       accept="image/*"
-      onChange={(e) => {
-        const file = e.target.files?.[0];
+      onChange={async (e) => {
+        const input = e.currentTarget;
+        const file = input.files?.[0];
         if (!file) return;
-        if (file.size > 5 * 1024 * 1024) {
-          alert("Asset image must be 5 MB or smaller");
-          e.target.value = "";
+        if (file.size > 20 * 1024 * 1024) {
+          alert("Asset image must be 20 MB or smaller");
+          input.value = "";
           return;
         }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const result = event.target?.result;
-          if (typeof result === "string") {
-            setEditingAsset({ ...editingAsset, image: result });
-          }
-        };
-        reader.readAsDataURL(file);
+        try {
+          const image = await compressImageToDataUrl(file);
+          setEditingAsset({ ...editingAsset, image });
+        } catch (imageError) {
+          input.value = "";
+          alert(
+            imageError instanceof Error
+              ? imageError.message
+              : "The picture could not be processed."
+          );
+        }
       }}
       className="w-full rounded-lg border border-gray-300 p-3 text-sm"
     />
@@ -804,6 +804,7 @@ export default function DashboardPage() {
                       body: JSON.stringify(editingAsset),
                     }
                   );
+                  const data = await res.json();
 
                   if (res.ok) {
                     setAssets((prev) =>
@@ -822,7 +823,7 @@ export default function DashboardPage() {
                       setToastMessage("");
                     }, 3000);
                   } else {
-                    alert("Failed to update asset");
+                    alert(data.message || "Failed to update asset");
                   }
                 } catch (error) {
                   console.error(error);

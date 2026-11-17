@@ -1,9 +1,45 @@
+const fs = require("node:fs");
+const path = require("node:path");
+
+const configPath = path.join(__dirname, "scanner-config.json");
+let scannerConfig = {};
+
+if (fs.existsSync(configPath)) {
+  try {
+    scannerConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    if (
+      typeof scannerConfig !== "object" ||
+      scannerConfig === null ||
+      Array.isArray(scannerConfig)
+    ) {
+      throw new Error("Configuration must be a JSON object");
+    }
+  } catch (err) {
+    console.error(`❌ Invalid scanner configuration at ${configPath}:`, err.message);
+    process.exit(1);
+  }
+}
+
+const apiUrl =
+  typeof scannerConfig.apiUrl === "string"
+    ? scannerConfig.apiUrl
+    : "http://localhost:3000/api/scanner";
+const apiKey =
+  typeof scannerConfig.apiKey === "string" && scannerConfig.apiKey.length > 0
+    ? scannerConfig.apiKey
+    : undefined;
+const room = typeof scannerConfig.room === "string" ? scannerConfig.room : "Room1";
+const insidePort =
+  typeof scannerConfig.insidePort === "string" ? scannerConfig.insidePort : "COM5";
+const outsidePort =
+  typeof scannerConfig.outsidePort === "string" ? scannerConfig.outsidePort : "COM6";
+
 const { SerialPort } = require("serialport");
 const { ReadlineParser } = require("@serialport/parser-readline");
 
 const scanners = [
-  { path: "COM5", side: "inside" },
-  { path: "COM6", side: "outside" },
+  { path: insidePort, side: "inside" },
+  { path: outsidePort, side: "outside" },
 ];
 
 const ports = scanners.map(({ path, side }) => {
@@ -51,24 +87,34 @@ async function handleScan(uid, scanner) {
   console.log(`📡 Scan detected on ${scanner}:`, uid);
 
   try {
-    const response = await fetch(
-      "http://localhost:3000/api/scanner",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          uid,
-          room: "Room1",
-          scanner,
-        }),
-      }
-    );
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) {
+      headers["x-scanner-key"] = apiKey;
+    }
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        uid,
+        room,
+        scanner,
+      }),
+    });
 
     const data = await response.json();
 
-    console.log("✅ Scan recorded:", data);
+    if (response.ok) {
+      console.log("✅ Scan recorded:", data);
+    } else {
+      const message =
+        typeof data.message === "string" ? data.message : response.statusText;
+      console.error(
+        `❌ Server rejected scan (status ${response.status}): ${message}`
+      );
+    }
   } catch (err) {
     console.error("❌ API Error:", err.message);
   }

@@ -6,6 +6,7 @@ import ScanLog from "@/models/ScanLog";
 import UnregisteredScan from "@/models/UnregisteredScan";
 import { processScannerDetection } from "@/lib/scanner-state";
 import PendingScan from "@/models/PendingScan";
+import { isScannerAuthorized } from "@/lib/scanner-auth";
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -47,6 +48,19 @@ const pendingScanStore = {
 };
 
 export async function POST(req: Request) {
+  if (
+    !isScannerAuthorized(
+      req.headers.get("x-scanner-key"),
+      process.env.SCANNER_API_KEY,
+      process.env.NODE_ENV
+    )
+  ) {
+    return NextResponse.json(
+      { message: "Unauthorized scanner" },
+      { status: 401 }
+    );
+  }
+
   try {
     await connectDB();
 

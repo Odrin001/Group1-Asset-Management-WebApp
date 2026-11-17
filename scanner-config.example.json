@@ -1,0 +1,7 @@
+{
+  "apiUrl": "http://localhost:3000/api/scanner",
+  "apiKey": "REPLACE_WITH_SCANNER_API_KEY",
+  "room": "Room1",
+  "insidePort": "COM5",
+  "outsidePort": "COM6"
+}
